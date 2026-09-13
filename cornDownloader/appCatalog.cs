@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace CornDownloader
 {
@@ -33,6 +35,12 @@ namespace CornDownloader
         /// default flags. Null = use the default. Ignored for winget installs and .msi files.
         /// </summary>
         public string SilentArgs { get; set; }
+        /// <summary>
+        /// Optional SHA-256 (hex) of the direct-URL file. When set, the download is verified
+        /// before the installer runs. Only useful for version-pinned URLs (NVIDIA App etc.);
+        /// "latest" redirect links change content and must leave this null.
+        /// </summary>
+        public string Sha256 { get; set; }
 
         /// <summary>True if this entry has at least one working install path.</summary>
         public bool HasInstallMethod =>
@@ -43,6 +51,17 @@ namespace CornDownloader
 
     public static class AppCatalog
     {
+        /// <summary>Match by stable Id first, then by Name (for packs exported before Id existed).</summary>
+        public static AppEntry Find(string id, string name = null)
+        {
+            AppEntry entry = null;
+            if (!string.IsNullOrEmpty(id))
+                entry = All.FirstOrDefault(a => string.Equals(a.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (entry == null && !string.IsNullOrEmpty(name))
+                entry = All.FirstOrDefault(a => string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase));
+            return entry;
+        }
+
         public static readonly List<AppEntry> All = new List<AppEntry>
         {
             // ── BROWSERS ──────────────────────────────────────────────────────
@@ -842,10 +861,11 @@ namespace CornDownloader
                 FileName = null,
             },
             new AppEntry {
-                Id = "ProcessHacker.ProcessHacker",
-                Name = "Process Hacker", Category = "Utilities & System Tools", IconChar = "🪛",
-                Description = "Advanced process viewer and system monitor",
-                WingetId = "ProcessHacker.ProcessHacker",
+                // Process Hacker was abandoned upstream and renamed System Informer.
+                Id = "ProcessHacker.ProcessHacker",   // keep the old Id so exported packs still match
+                Name = "System Informer", Category = "Utilities & System Tools", IconChar = "🪛",
+                Description = "Advanced process viewer and system monitor (successor to Process Hacker)",
+                WingetId = "WinsiderSS.SystemInformer",
                 DirectUrl = null,
                 FileName = null,
             },
@@ -1044,14 +1064,6 @@ namespace CornDownloader
                 WingetId = "NexusMods.Vortex",
                 DirectUrl = null,
                 FileName = null,
-            },
-            new AppEntry {
-                Id = "nexus-mod-manager",
-                Name = "Nexus Mod Manager", Category = "Gaming", IconChar = "📦",
-                Description = "Classic mod manager for Nexus Mods (legacy)",
-                WingetId = null,
-                DirectUrl = "https://github.com/Nexus-Mods/Nexus-Mod-Manager/releases/latest/download/NexusModManager.exe",
-                FileName = "NexusModManager.exe",
             },
             new AppEntry {
                 Id = "ModOrganizer2.ModOrganizer2",

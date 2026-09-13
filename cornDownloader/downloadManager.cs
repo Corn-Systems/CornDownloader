@@ -1,10 +1,16 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace CornDownloader
@@ -24,363 +30,203 @@ namespace CornDownloader
         public AppEntry App { get; set; }
         public InstallStatus Status { get; set; }
         public string Message { get; set; }
+        public bool RebootRequired { get; set; }
     }
 
     public class DownloadManager
     {
         public bool WingetAvailable { get; private set; }
 
+        // "auto" | "user" | "machine" — appended as --scope when not auto.
+        public string WingetScope { get; set; } = "auto";
+
+        private const int MaxParallelDownloads = 3;
+        private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(60);   // no bytes for this long = dead connection
+        private const int    RetryPasses = 2;
+
+        private static readonly HttpClient _http;
+
+        // Elevation prompts are ugly three-at-a-time; run the actual installer launches
+        // one after another while downloads stay parallel.
+        private static readonly SemaphoreSlim _installerGate = new SemaphoreSlim(1, 1);
+
+        static DownloadManager()
+        {
+            _http = new HttpClient(new HttpClientHandler
+            {
+                AllowAutoRedirect = true,
+                AutomaticDecompression = DecompressionMethods.None
+            })
+            {
+                Timeout = Timeout.InfiniteTimeSpan   // we manage stall detection ourselves
+            };
+            _http.DefaultRequestHeaders.UserAgent.ParseAdd(AppInfo.UserAgent);
+        }
+
         public DownloadManager()
         {
-            WingetAvailable = CheckWinget();
+            WingetAvailable = WingetRunner.Resolve();
         }
 
-        private bool CheckWinget()
-        {
-            try
-            {
-                var psi = new ProcessStartInfo("winget", "--version")
-                {
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                using (var p = Process.Start(psi))
-                {
-                    p.WaitForExit(3000);
-                    return p.ExitCode == 0;
-                }
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        private string ScopeArg => WingetScope is "user" or "machine" ? $" --scope {WingetScope}" : "";
 
-        /// <summary>
-        /// Runs 'winget source update' silently in the background so subsequent
-        /// installs and upgrade checks use fresh package data.
-        /// </summary>
-        public async Task RefreshSourcesAsync()
+        // ── winget: metadata ────────────────────────────────────────────────
+
+        public async Task RefreshSourcesAsync(CancellationToken ct = default)
         {
             if (!WingetAvailable) return;
-            try
-            {
-                var psi = new ProcessStartInfo("winget", "source update")
-                {
-                    RedirectStandardOutput = true,
-                    RedirectStandardError  = true,
-                    UseShellExecute        = false,
-                    CreateNoWindow         = true
-                };
-                using var proc = Process.Start(psi);
-                bool exited = await Task.Run(() => proc.WaitForExit(30_000)); // 30s timeout
-                if (!exited)
-                {
-                    // Don't leave an orphaned winget process running — it can hold the
-                    // source lock and cause "another WinGet process is running" errors
-                    // on the very next call this app makes.
-                    try { proc.Kill(true); } catch { }
-                }
-            }
-            catch { }
+            var r = await WingetRunner.RunAsync("source update", WingetRunner.QuickTimeout, null, ct);
+            if (!r.Succeeded && !r.Cancelled)
+                SessionLog.Write($"[WINGET] source update did not complete cleanly ({ExitCodes.Describe(r.ExitCode)})");
         }
 
-        /// <summary>
-        /// Uses 'winget export' to get a clean JSON list of all installed apps,
-        /// then matches against the catalog. JSON is far more reliable than parsing
-        /// the formatted table output of 'winget list'.
-        /// </summary>
-        public async Task<HashSet<string>> GetAllInstalledIdsAsync()
+        // 'winget export' → JSON of installed packages that exist in a source. Far more
+        // reliable than parsing the 'winget list' table.
+        public async Task<HashSet<string>> GetAllInstalledIdsAsync(CancellationToken ct = default)
         {
             var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (!WingetAvailable) return installed;
 
             string tempFile = Path.Combine(Path.GetTempPath(), $"corndownloader_{Guid.NewGuid():N}.json");
-
             try
             {
-                var psi = new ProcessStartInfo
-                {
-                    FileName        = "winget",
-                    Arguments       = $"export -o \"{tempFile}\" --accept-source-agreements --include-versions",
-                    UseShellExecute = false,
-                    CreateNoWindow  = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError  = true
-                };
+                var r = await WingetRunner.RunAsync(
+                    $"export -o \"{tempFile}\" --accept-source-agreements --include-versions",
+                    WingetRunner.ScanTimeout, null, ct);
 
-                var tcs  = new TaskCompletionSource<bool>();
-                var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
-                proc.Exited += (s, e) => tcs.TrySetResult(true);
-                proc.Start();
-                proc.BeginOutputReadLine();
-                proc.BeginErrorReadLine();
-
-                await Task.WhenAny(tcs.Task, Task.Delay(20000));
-
-                if (!tcs.Task.IsCompleted)
-                {
-                    // Timed out — don't leave winget running in the background.
-                    try { if (!proc.HasExited) proc.Kill(true); } catch { }
-                }
-                try { proc.Dispose(); } catch { }
-
+                if (r.TimedOut) SessionLog.Write("[SCAN] installed scan timed out — tiles may not show installed state");
                 if (!File.Exists(tempFile)) return installed;
 
-                string json = File.ReadAllText(tempFile, System.Text.Encoding.UTF8);
-
-                // The JSON structure is:
-                // { "Sources": [ { "Packages": [ { "PackageIdentifier": "Brave.Brave" }, ... ] } ] }
-                // Parse properly to avoid false positives (e.g. "Git.Git" matching "Git.GitLFS").
-                try
-                {
-                    using var doc = JsonDocument.Parse(json);
-                    if (doc.RootElement.TryGetProperty("Sources", out var sources))
+                using var doc = JsonDocument.Parse(File.ReadAllText(tempFile, Encoding.UTF8));
+                if (doc.RootElement.TryGetProperty("Sources", out var sources))
+                    foreach (var source in sources.EnumerateArray())
                     {
-                        foreach (var source in sources.EnumerateArray())
-                        {
-                            if (!source.TryGetProperty("Packages", out var packages)) continue;
-                            foreach (var pkg in packages.EnumerateArray())
-                            {
-                                if (pkg.TryGetProperty("PackageIdentifier", out var idProp))
-                                    installed.Add(idProp.GetString() ?? "");
-                            }
-                        }
+                        if (!source.TryGetProperty("Packages", out var packages)) continue;
+                        foreach (var pkg in packages.EnumerateArray())
+                            if (pkg.TryGetProperty("PackageIdentifier", out var idProp))
+                                installed.Add(idProp.GetString() ?? "");
                     }
-                }
-                catch { /* malformed JSON — fall back to empty set */ }
             }
-            catch { }
+            catch (JsonException ex) { SessionLog.Write("[SCAN] export JSON unreadable: " + ex.Message); }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { SessionLog.Write("SCAN", ex); }
             finally
             {
-                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch (Exception ex) { SessionLog.Write("SCAN-CLEANUP", ex); }
             }
-
             return installed;
         }
 
-        /// <summary>
-        /// Runs 'winget upgrade' and returns a HashSet of winget IDs that have updates available.
-        /// </summary>
-        public async Task<HashSet<string>> GetAvailableUpdatesAsync()
+        // Parses 'winget upgrade'. winget truncates long IDs with '…' to fit the (virtual)
+        // console width, so besides exact token matches we also accept a truncated token
+        // as a unique prefix of a catalog ID.
+        public async Task<HashSet<string>> GetAvailableUpdatesAsync(CancellationToken ct = default)
         {
             var updatable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (!WingetAvailable) return updatable;
 
             try
             {
-                // Export upgradeable packages to JSON — same reliable approach as installed scan
-                var psi = new ProcessStartInfo
+                var r = await WingetRunner.RunAsync(
+                    "upgrade --accept-source-agreements --include-unknown",
+                    WingetRunner.ScanTimeout, null, ct);
+                if (r.TimedOut) { SessionLog.Write("[SCAN] upgrade scan timed out"); return updatable; }
+
+                var catalogIds = AppCatalog.All.Where(a => !string.IsNullOrEmpty(a.WingetId))
+                                               .Select(a => a.WingetId).ToList();
+
+                var tokens = r.Output.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                var exact  = new HashSet<string>(tokens, StringComparer.OrdinalIgnoreCase);
+
+                foreach (var id in catalogIds)
+                    if (exact.Contains(id)) updatable.Add(id);
+
+                foreach (var raw in tokens)
                 {
-                    FileName               = "winget",
-                    Arguments              = $"upgrade --accept-source-agreements",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError  = true,
-                    UseShellExecute        = false,
-                    CreateNoWindow         = true,
-                    StandardOutputEncoding = System.Text.Encoding.UTF8
-                };
-
-                var tcs    = new TaskCompletionSource<bool>();
-                var proc   = new Process { StartInfo = psi, EnableRaisingEvents = true };
-                var output = new System.Text.StringBuilder();
-
-                proc.OutputDataReceived += (s, e) =>
-                {
-                    if (e.Data != null) output.AppendLine(e.Data);
-                };
-                proc.ErrorDataReceived += (s, e) => { };
-                proc.Exited += (s, e) => tcs.TrySetResult(true);
-                proc.Start();
-                proc.BeginOutputReadLine();
-                proc.BeginErrorReadLine();
-
-                await Task.WhenAny(tcs.Task, Task.Delay(20000));
-
-                if (!tcs.Task.IsCompleted)
-                {
-                    // Timed out — don't leave winget running in the background.
-                    try { if (!proc.HasExited) proc.Kill(true); } catch { }
-                }
-                try { proc.Dispose(); } catch { }
-
-                // Strip non-ASCII chars and match catalog IDs
-                var clean = new System.Text.StringBuilder();
-                foreach (char c in output.ToString())
-                    if (c == '\n' || c == '\r' || (c >= 32 && c <= 126))
-                        clean.Append(c);
-
-                string cleanOutput = clean.ToString();
-
-                // Build a set of all whitespace-delimited tokens in the output so we
-                // can do exact-match lookups rather than substring IndexOf, which would
-                // cause "Git.Git" to match lines that contain "Git.GitLFS", etc.
-                var tokens = new HashSet<string>(
-                    cleanOutput.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries),
-                    StringComparer.OrdinalIgnoreCase);
-
-                foreach (var app in AppCatalog.All)
-                {
-                    if (string.IsNullOrEmpty(app.WingetId)) continue;
-                    if (tokens.Contains(app.WingetId))
-                        updatable.Add(app.WingetId);
+                    string t = raw.TrimEnd('…', '.');
+                    if (t.Length == raw.Length || t.Length < 4) continue;   // not truncated / too short to be safe
+                    var matches = catalogIds.Where(id => id.StartsWith(t, StringComparison.OrdinalIgnoreCase)).ToList();
+                    if (matches.Count == 1) updatable.Add(matches[0]);
                 }
             }
-            catch { }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { SessionLog.Write("SCAN-UPGRADE", ex); }
 
             return updatable;
         }
 
-        /// <summary>
-        /// Queries 'winget show --id X' and returns the list of available versions,
-        /// most-recent first. Returns an empty list if winget is unavailable or the
-        /// app has no winget ID.
-        /// </summary>
-        public async Task<List<string>> GetAvailableVersionsAsync(AppEntry app)
+        public async Task<List<string>> GetAvailableVersionsAsync(AppEntry app, CancellationToken ct = default)
         {
             var versions = new List<string>();
             if (!WingetAvailable || string.IsNullOrEmpty(app.WingetId)) return versions;
 
             try
             {
-                var psi = new ProcessStartInfo
-                {
-                    FileName               = "winget",
-                    Arguments              = $"show --id {app.WingetId} --versions --accept-source-agreements",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError  = true,
-                    UseShellExecute        = false,
-                    CreateNoWindow         = true,
-                    StandardOutputEncoding = System.Text.Encoding.UTF8
-                };
+                var r = await WingetRunner.RunAsync(
+                    $"show --id {app.WingetId} --exact --versions --accept-source-agreements",
+                    WingetRunner.VersionsTimeout, null, ct);
 
-                var tcs    = new TaskCompletionSource<bool>();
-                var proc   = new Process { StartInfo = psi, EnableRaisingEvents = true };
-                var lines  = new List<string>();
-
-                proc.OutputDataReceived += (s, e) => { if (e.Data != null) lines.Add(e.Data); };
-                proc.Exited += (s, e) => tcs.TrySetResult(true);
-                proc.Start();
-                proc.BeginOutputReadLine();
-                proc.BeginErrorReadLine();
-                await Task.WhenAny(tcs.Task, Task.Delay(15_000));
-
-                if (!tcs.Task.IsCompleted)
-                {
-                    // Timed out — don't leave winget running in the background.
-                    try { if (!proc.HasExited) proc.Kill(true); } catch { }
-                }
-                try { proc.Dispose(); } catch { }
-
-                // winget --versions output looks like:
-                //   Version
-                //   -------
-                //   129.0.0.0
-                //   128.0.0.0
-                // Skip header rows; version lines are all digits and dots.
                 bool pastHeader = false;
-                foreach (var line in lines)
+                foreach (var line in r.Output.Split('\n'))
                 {
                     string t = line.Trim();
-                    if (!pastHeader)
-                    {
-                        if (t.StartsWith("---")) pastHeader = true;
-                        continue;
-                    }
-                    if (t.Length > 0 && (char.IsDigit(t[0]) || t[0] == 'v'))
-                        versions.Add(t);
+                    if (!pastHeader) { if (t.StartsWith("---")) pastHeader = true; continue; }
+                    if (t.Length > 0 && (char.IsDigit(t[0]) || t[0] == 'v')) versions.Add(t);
                 }
             }
-            catch { }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { SessionLog.Write("VERSIONS", ex); }
 
             return versions;
         }
 
-        /// <summary>
-        /// Upgrades an already-installed app via winget upgrade.
-        /// </summary>
-        public async Task<InstallResult> UpgradeAsync(AppEntry app, Action<string> onProgress,
-            System.Threading.CancellationToken cancellationToken = default)
+        // ── winget: install / upgrade ───────────────────────────────────────
+
+        public async Task<InstallResult> UpgradeAsync(AppEntry app, Action<string> onProgress, CancellationToken ct = default)
         {
             var result = new InstallResult { App = app, Status = InstallStatus.Installing };
             onProgress?.Invoke($"Upgrading {app.Name}...");
 
-            try
-            {
-                var tcs = new TaskCompletionSource<bool>();
-                var psi = new ProcessStartInfo
-                {
-                    FileName               = "winget",
-                    Arguments              = $"upgrade --id {app.WingetId} --silent --accept-source-agreements --accept-package-agreements",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError  = true,
-                    UseShellExecute        = false,
-                    CreateNoWindow         = true
-                };
+            var r = await WingetRunner.RunAsync(
+                $"upgrade --id {app.WingetId} --exact --silent --accept-source-agreements --accept-package-agreements{ScopeArg}",
+                Timeout.InfiniteTimeSpan, onProgress, ct);
 
-                var proc   = new Process { StartInfo = psi, EnableRaisingEvents = true };
-                var output = new System.Text.StringBuilder();
+            return Finish(result, r, $"{app.Name} upgraded successfully.");
+        }
 
-                proc.OutputDataReceived += (s, e) =>
-                {
-                    if (!string.IsNullOrEmpty(e.Data))
-                    {
-                        output.AppendLine(e.Data);
-                        onProgress?.Invoke(e.Data);
-                    }
-                };
-                proc.Exited += (s, e) => tcs.TrySetResult(true);
-                proc.Start();
-                proc.BeginOutputReadLine();
-                proc.BeginErrorReadLine();
+        private async Task<InstallResult> InstallViaWinget(AppEntry app, InstallResult result, Action<string> onProgress, CancellationToken ct)
+        {
+            result.Status = InstallStatus.Installing;
+            onProgress?.Invoke($"Installing {app.Name} via winget...");
 
-                await Task.WhenAny(tcs.Task, Task.Delay(System.Threading.Timeout.Infinite, cancellationToken));
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    try { if (!proc.HasExited) proc.Kill(true); } catch { }
-                    result.Status  = InstallStatus.Skipped;
-                    result.Message = "Cancelled.";
-                    return result;
-                }
+            var args = new StringBuilder($"install --id {app.WingetId} --exact");
+            if (!string.IsNullOrEmpty(app.PinnedVersion)) args.Append($" --version \"{app.PinnedVersion}\"");
+            args.Append(" --silent --accept-source-agreements --accept-package-agreements");
+            if (app.ForceReinstall) args.Append(" --force");
+            args.Append(ScopeArg);
 
-                if (proc.ExitCode == 0 || proc.ExitCode == -1978335189)
-                {
-                    result.Status  = InstallStatus.Success;
-                    result.Message = $"{app.Name} upgraded successfully.";
-                }
-                else
-                {
-                    result.Status  = InstallStatus.Failed;
-                    result.Message = $"winget upgrade exited with code {proc.ExitCode}.";
-                }
-            }
-            catch (Exception ex)
-            {
-                result.Status  = InstallStatus.Failed;
-                result.Message = ex.Message;
-            }
+            var r = await WingetRunner.RunAsync(args.ToString(), Timeout.InfiniteTimeSpan, onProgress, ct);
+            return Finish(result, r, "Installed successfully via winget.");
+        }
 
+        private static InstallResult Finish(InstallResult result, WingetResult r, string successMsg)
+        {
+            if (r.Cancelled)          { result.Status = InstallStatus.Skipped; result.Message = "Cancelled."; }
+            else if (r.Succeeded)     { result.Status = InstallStatus.Success; result.Message = successMsg; }
+            else                      { result.Status = InstallStatus.Failed;  result.Message = $"winget: {ExitCodes.Describe(r.ExitCode)}"; }
+            result.RebootRequired = ExitCodes.NeedsReboot(r.ExitCode);
             return result;
         }
 
+        // ── Dispatch ────────────────────────────────────────────────────────
+
         public async Task<InstallResult> InstallAsync(
-            AppEntry app,
-            string downloadFolder,
-            bool preferWinget,
-            Action<string> onProgress,
-            System.Threading.CancellationToken cancellationToken = default)
+            AppEntry app, string downloadFolder, bool preferWinget, Action<string> onProgress, CancellationToken ct = default)
         {
             var result = new InstallResult { App = app, Status = InstallStatus.Pending };
 
-            if (cancellationToken.IsCancellationRequested)
-            {
-                result.Status  = InstallStatus.Skipped;
-                result.Message = "Cancelled.";
-                return result;
-            }
+            if (ct.IsCancellationRequested) { result.Status = InstallStatus.Skipped; result.Message = "Cancelled."; return result; }
 
-            // Bundled apps (e.g. FancyZones inside PowerToys) can't be installed standalone.
             if (!string.IsNullOrEmpty(app.IsBundledWith))
             {
                 result.Status  = InstallStatus.Skipped;
@@ -391,267 +237,225 @@ namespace CornDownloader
             bool useWinget = preferWinget && WingetAvailable && !string.IsNullOrEmpty(app.WingetId);
             bool hasDirect = !string.IsNullOrEmpty(app.DirectUrl) && !string.IsNullOrEmpty(app.FileName);
 
-            // Fallback logic
             if (!useWinget && !hasDirect)
             {
-                result.Status = InstallStatus.Failed;
+                result.Status  = InstallStatus.Failed;
                 result.Message = "No installation method available.";
                 return result;
             }
 
-            if (useWinget)
-            {
-                return await InstallViaWinget(app, result, onProgress, cancellationToken);
-            }
-            else
-            {
-                return await InstallViaDirectUrl(app, downloadFolder, result, onProgress, cancellationToken);
-            }
+            return useWinget
+                ? await InstallViaWinget(app, result, onProgress, ct)
+                : await InstallViaDirectUrl(app, downloadFolder, result, onProgress, ct);
         }
 
-        private async Task<InstallResult> InstallViaWinget(
-            AppEntry app,
-            InstallResult result,
-            Action<string> onProgress,
-            System.Threading.CancellationToken cancellationToken = default)
-        {
-            result.Status = InstallStatus.Installing;
-            onProgress?.Invoke($"Installing {app.Name} via winget...");
-
-            try
-            {
-                var tcs = new TaskCompletionSource<bool>();
-                string forceFlag = app.ForceReinstall ? " --force" : "";
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "winget",
-                    Arguments = string.IsNullOrEmpty(app.PinnedVersion)
-                        ? $"install --id {app.WingetId} --silent --accept-source-agreements --accept-package-agreements{forceFlag}"
-                        : $"install --id {app.WingetId} --version \"{app.PinnedVersion}\" --silent --accept-source-agreements --accept-package-agreements{forceFlag}",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-
-                var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
-                var output = new System.Text.StringBuilder();
-
-                proc.OutputDataReceived += (s, e) =>
-                {
-                    if (!string.IsNullOrEmpty(e.Data))
-                    {
-                        output.AppendLine(e.Data);
-                        onProgress?.Invoke(e.Data);
-                    }
-                };
-                proc.ErrorDataReceived += (s, e) =>
-                {
-                    if (!string.IsNullOrEmpty(e.Data))
-                        output.AppendLine("[ERR] " + e.Data);
-                };
-                proc.Exited += (s, e) => tcs.TrySetResult(true);
-
-                proc.Start();
-                proc.BeginOutputReadLine();
-                proc.BeginErrorReadLine();
-
-                await Task.WhenAny(tcs.Task, Task.Delay(System.Threading.Timeout.Infinite, cancellationToken));
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    try { if (!proc.HasExited) proc.Kill(true); } catch { }
-                    result.Status  = InstallStatus.Skipped;
-                    result.Message = "Cancelled.";
-                    return result;
-                }
-
-                if (proc.ExitCode == 0 || proc.ExitCode == -1978335189) // already installed
-                {
-                    result.Status = InstallStatus.Success;
-                    result.Message = "Installed successfully via winget.";
-                }
-                else
-                {
-                    result.Status = InstallStatus.Failed;
-                    result.Message = $"winget exited with code {proc.ExitCode}.";
-                }
-            }
-            catch (Exception ex)
-            {
-                result.Status = InstallStatus.Failed;
-                result.Message = ex.Message;
-            }
-
-            return result;
-        }
-
-        private static readonly HttpClient _httpClient = new HttpClient();
-
-        static DownloadManager()
-        {
-            // Set the user-agent once. Calling ParseAdd on every request throws if
-            // the header already exists from a previous download.
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("CornDownloader/1.2");
-        }
+        // ── Direct URL: download (resumable, verified) + run installer ──────
 
         private async Task<InstallResult> InstallViaDirectUrl(
-            AppEntry app,
-            string downloadFolder,
-            InstallResult result,
-            Action<string> onProgress,
-            System.Threading.CancellationToken cancellationToken = default)
+            AppEntry app, string downloadFolder, InstallResult result, Action<string> onProgress, CancellationToken ct)
         {
-            result.Status = InstallStatus.Downloading;
-            onProgress?.Invoke($"Downloading {app.Name}...");
-
             string destPath = Path.Combine(downloadFolder, app.FileName);
+            string partPath = destPath + ".part";
+            bool   installed = false;
 
             try
             {
-                using (var response = await _httpClient.GetAsync(app.DirectUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
-                {
-                    response.EnsureSuccessStatusCode();
-                    long? totalBytes = response.Content.Headers.ContentLength;
+                result.Status = InstallStatus.Downloading;
+                await DownloadWithResumeAsync(app, destPath, partPath, onProgress, ct);
 
-                    using (var stream = await response.Content.ReadAsStreamAsync())
-                    using (var file   = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                if (!string.IsNullOrEmpty(app.Sha256))
+                {
+                    onProgress?.Invoke($"Verifying {app.Name}...");
+                    string actual = await ComputeSha256Async(destPath, ct);
+                    if (!string.Equals(actual, app.Sha256, StringComparison.OrdinalIgnoreCase))
                     {
-                        var buffer    = new byte[81920];
-                        long read     = 0;
-                        int  bytes;
-                        while ((bytes = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
-                        {
-                            await file.WriteAsync(buffer, 0, bytes, cancellationToken);
-                            read += bytes;
-                            if (totalBytes > 0)
-                            {
-                                int pct = (int)(read * 100 / totalBytes.Value);
-                                onProgress?.Invoke($"Downloading {app.Name}: {pct}%");
-                            }
-                        }
+                        try { File.Delete(destPath); } catch { }
+                        throw new InvalidDataException($"SHA-256 mismatch — expected {app.Sha256[..12]}…, got {actual[..12]}…. File deleted.");
                     }
                 }
 
                 onProgress?.Invoke($"Download complete. Launching installer for {app.Name}...");
                 result.Status = InstallStatus.Installing;
 
-                string ext = Path.GetExtension(app.FileName).ToLowerInvariant();
+                int exitCode = await RunInstallerAsync(app, destPath, ct);
 
-                // Most EXE installers accept the default flag set (NSIS-style /S plus a few
-                // common no-ops other installers just ignore), but some installer technologies
-                // (Inno Setup with different switches, Squirrel, custom bootstrappers) need
-                // their own. AppEntry.SilentArgs lets a catalog entry override the default.
-                const string defaultExeSilentArgs = "/S /silent /quiet /passive /norestart";
-                string exeSilentArgs = !string.IsNullOrEmpty(app.SilentArgs) ? app.SilentArgs : defaultExeSilentArgs;
+                if (ct.IsCancellationRequested) { result.Status = InstallStatus.Skipped; result.Message = "Cancelled."; return result; }
 
-                var psi = ext == ".msi"
-                    ? new ProcessStartInfo("msiexec", $"/i \"{destPath}\" /passive /norestart")
-                    {
-                        UseShellExecute = true,
-                        Verb = "runas"
-                    }
-                    : new ProcessStartInfo(destPath, exeSilentArgs)
-                    {
-                        UseShellExecute = true,
-                        Verb = "runas"
-                    };
-
-                var proc = Process.Start(psi);
-                using var reg = cancellationToken.Register(() => { try { proc?.Kill(true); } catch { } });
-                await Task.Run(() => proc.WaitForExit());
-
-                if (cancellationToken.IsCancellationRequested)
+                if (ExitCodes.IsInstallerSuccess(exitCode))
                 {
-                    result.Status  = InstallStatus.Skipped;
-                    result.Message = "Cancelled.";
-                    return result;
-                }
-
-                // Exit code 0 = success; many silent installers also use 1641 (reboot needed)
-                // or 3010 (reboot scheduled) as non-error codes.
-                int exitCode = proc.ExitCode;
-                if (exitCode == 0 || exitCode == 1641 || exitCode == 3010)
-                {
+                    installed = true;
                     result.Status  = InstallStatus.Success;
-                    result.Message = "Installer ran successfully.";
+                    result.RebootRequired = ExitCodes.NeedsReboot(exitCode);
+                    result.Message = result.RebootRequired ? "Installed — restart required." : "Installer ran successfully.";
                 }
                 else
                 {
                     result.Status  = InstallStatus.Failed;
-                    result.Message = $"Installer exited with code {exitCode}.";
+                    result.Message = $"Installer: {ExitCodes.Describe(exitCode)}. File kept at {destPath}";
                 }
             }
             catch (OperationCanceledException)
             {
                 result.Status  = InstallStatus.Skipped;
-                result.Message = "Cancelled.";
+                result.Message = "Cancelled (partial download kept for resume).";
+            }
+            catch (Win32Exception ex) when (ex.NativeErrorCode == ExitCodes.UacDeclined)
+            {
+                result.Status  = InstallStatus.Failed;
+                result.Message = "UAC prompt was declined — installer not run.";
             }
             catch (Exception ex)
             {
-                result.Status = InstallStatus.Failed;
+                SessionLog.Write($"DIRECT:{app.Name}", ex);
+                result.Status  = InstallStatus.Failed;
                 result.Message = ex.Message;
             }
             finally
             {
-                // Always clean up the downloaded installer file regardless of outcome.
-                try { if (File.Exists(destPath)) File.Delete(destPath); } catch { }
+                // Only remove the installer after a successful run. Failed installs keep the
+                // file so it can be inspected or run by hand; cancelled downloads keep .part.
+                if (installed)
+                    try { if (File.Exists(destPath)) File.Delete(destPath); }
+                    catch (Exception ex) { SessionLog.Write("DIRECT-CLEANUP", ex); }
             }
 
             return result;
         }
 
+        private static async Task DownloadWithResumeAsync(AppEntry app, string destPath, string partPath,
+            Action<string> onProgress, CancellationToken ct)
+        {
+            long existing = 0;
+            try { if (File.Exists(partPath)) existing = new FileInfo(partPath).Length; } catch { existing = 0; }
+
+            using var req = new HttpRequestMessage(HttpMethod.Get, app.DirectUrl);
+            if (existing > 0) req.Headers.Range = new RangeHeaderValue(existing, null);
+
+            using var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+
+            bool resuming = existing > 0 && response.StatusCode == HttpStatusCode.PartialContent;
+            if (existing > 0 && !resuming)
+            {
+                // Server ignored Range (or file changed) — start over.
+                SessionLog.Write($"[DL] {app.Name}: server did not honour Range, restarting download");
+                existing = 0;
+                try { File.Delete(partPath); } catch { }
+            }
+            response.EnsureSuccessStatusCode();
+
+            long? total = response.Content.Headers.ContentLength;
+            if (total.HasValue) total += existing;   // ContentLength of a 206 is the remainder
+
+            onProgress?.Invoke(resuming ? $"Resuming {app.Name} from {existing / 1024 / 1024} MB..." : $"Downloading {app.Name}...");
+
+            using (var stallCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            using (var stream   = await response.Content.ReadAsStreamAsync(ct))
+            using (var file     = new FileStream(partPath, resuming ? FileMode.Append : FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true))
+            {
+                var  buffer  = new byte[1 << 16];
+                long read    = existing;
+                int  lastPct = -1;
+                int  bytes;
+
+                stallCts.CancelAfter(StallTimeout);
+                while (true)
+                {
+                    try { bytes = await stream.ReadAsync(buffer, 0, buffer.Length, stallCts.Token); }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    {
+                        throw new IOException($"Download stalled — no data for {StallTimeout.TotalSeconds:0}s. Retry to resume.");
+                    }
+                    if (bytes <= 0) break;
+                    stallCts.CancelAfter(StallTimeout);   // reset the watchdog on every chunk
+
+                    await file.WriteAsync(buffer, 0, bytes, ct);
+                    read += bytes;
+                    if (total > 0)
+                    {
+                        int pct = (int)(read * 100 / total.Value);
+                        if (pct != lastPct) { lastPct = pct; onProgress?.Invoke($"Downloading {app.Name}: {pct}%"); }
+                    }
+                }
+            }
+
+            if (File.Exists(destPath)) File.Delete(destPath);
+            File.Move(partPath, destPath);
+        }
+
+        private static async Task<string> ComputeSha256Async(string path, CancellationToken ct)
+        {
+            using var sha  = SHA256.Create();
+            using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16, useAsync: true);
+            var hash = await sha.ComputeHashAsync(file, ct);
+            return Convert.ToHexString(hash);
+        }
+
+        private static async Task<int> RunInstallerAsync(AppEntry app, string destPath, CancellationToken ct)
+        {
+            const string defaultExeSilentArgs = "/S /silent /quiet /passive /norestart";
+            string ext  = Path.GetExtension(destPath).ToLowerInvariant();
+            string args = !string.IsNullOrEmpty(app.SilentArgs) ? app.SilentArgs : defaultExeSilentArgs;
+
+            var psi = ext == ".msi"
+                ? new ProcessStartInfo("msiexec", $"/i \"{destPath}\" /passive /norestart") { UseShellExecute = true, Verb = "runas" }
+                : new ProcessStartInfo(destPath, args) { UseShellExecute = true, Verb = "runas" };
+
+            await _installerGate.WaitAsync(ct);
+            try
+            {
+                SessionLog.Write($"[INSTALLER] > \"{psi.FileName}\" {psi.Arguments}");
+                using var proc = Process.Start(psi)
+                    ?? throw new InvalidOperationException("Process.Start returned null — the installer could not be launched.");
+                using var reg = ct.Register(() => { try { if (!proc.HasExited) proc.Kill(true); } catch { } });
+                await proc.WaitForExitAsync(CancellationToken.None);
+                SessionLog.Write($"[INSTALLER] < {ExitCodes.Describe(proc.ExitCode)}");
+                return proc.ExitCode;
+            }
+            finally { _installerGate.Release(); }
+        }
+
+        // ── Batch ───────────────────────────────────────────────────────────
+
         public async Task<List<InstallResult>> InstallAllAsync(
-            List<AppEntry> apps,
-            string downloadFolder,
-            bool preferWinget,
+            List<AppEntry> apps, string downloadFolder, bool preferWinget,
             Action<AppEntry, InstallStatus, string> onAppProgress,
             Action<int, int> onOverallProgress,
-            System.Threading.CancellationToken cancellationToken = default)
+            CancellationToken ct = default)
         {
             var results     = new List<InstallResult>();
             var resultsLock = new object();
             int total       = apps.Count;
             int done        = 0;
 
-            // Allow up to 3 concurrent installs — enough to saturate bandwidth
-            // without hammering the system or causing installer conflicts.
-            var semaphore = new System.Threading.SemaphoreSlim(3, 3);
+            // Downloads run in parallel; winget calls and installer launches are
+            // serialised inside WingetRunner / RunInstallerAsync respectively.
+            var semaphore = new SemaphoreSlim(MaxParallelDownloads, MaxParallelDownloads);
 
             var tasks = apps.Select(async app =>
             {
                 await semaphore.WaitAsync();
                 try
                 {
-                    if (cancellationToken.IsCancellationRequested)
+                    InstallResult result;
+                    if (ct.IsCancellationRequested)
+                        result = new InstallResult { App = app, Status = InstallStatus.Skipped, Message = "Cancelled." };
+                    else
                     {
-                        lock (resultsLock) { results.Add(new InstallResult { App = app, Status = InstallStatus.Skipped, Message = "Cancelled." }); done++; }
-                        onOverallProgress?.Invoke(done, total);
-                        onAppProgress?.Invoke(app, InstallStatus.Skipped, "Cancelled.");
-                        return;
+                        onAppProgress?.Invoke(app, InstallStatus.Installing, $"Starting {app.Name}...");
+                        result = await InstallAsync(app, downloadFolder, preferWinget,
+                            msg =>
+                            {
+                                var st = msg.StartsWith("Downloading") || msg.StartsWith("Resuming")
+                                    ? InstallStatus.Downloading : InstallStatus.Installing;
+                                onAppProgress?.Invoke(app, st, msg);
+                            }, ct);
                     }
 
-                    onAppProgress?.Invoke(app, InstallStatus.Installing, $"Starting {app.Name}...");
-
-                    var result = await InstallAsync(app, downloadFolder, preferWinget,
-                        msg =>
-                        {
-                            var st = msg.StartsWith("Downloading") ? InstallStatus.Downloading : InstallStatus.Installing;
-                            onAppProgress?.Invoke(app, st, msg);
-                        }, cancellationToken);
-
-                    lock (resultsLock)
-                    {
-                        results.Add(result);
-                        done++;
-                    }
-
+                    lock (resultsLock) { results.Add(result); done++; }
                     onOverallProgress?.Invoke(done, total);
                     onAppProgress?.Invoke(app, result.Status, result.Message);
                 }
-                finally
-                {
-                    semaphore.Release();
-                }
+                finally { semaphore.Release(); }
             });
 
             await Task.WhenAll(tasks);

@@ -46,3 +46,9 @@ Downloads/
 *.pdb
 *.exe
 !bin/Release/**/*.exe
+
+# Inno Setup output
+installer_output/
+
+# Partial downloads
+*.part
