@@ -42,7 +42,6 @@ namespace CornDownloader
 
         private const int MaxParallelDownloads = 3;
         private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(60);   // no bytes for this long = dead connection
-        private const int    RetryPasses = 2;
 
         private static readonly HttpClient _http;
 
@@ -103,8 +102,8 @@ namespace CornDownloader
                     {
                         if (!source.TryGetProperty("Packages", out var packages)) continue;
                         foreach (var pkg in packages.EnumerateArray())
-                            if (pkg.TryGetProperty("PackageIdentifier", out var idProp))
-                                installed.Add(idProp.GetString() ?? "");
+                            if (pkg.TryGetProperty("PackageIdentifier", out var idProp) && idProp.GetString() is { Length: > 0 } id)
+                                installed.Add(id);
                     }
             }
             catch (JsonException ex) { SessionLog.Write("[SCAN] export JSON unreadable: " + ex.Message); }
@@ -269,8 +268,8 @@ namespace CornDownloader
                     string actual = await ComputeSha256Async(destPath, ct);
                     if (!string.Equals(actual, app.Sha256, StringComparison.OrdinalIgnoreCase))
                     {
-                        try { File.Delete(destPath); } catch { }
-                        throw new InvalidDataException($"SHA-256 mismatch — expected {app.Sha256[..12]}…, got {actual[..12]}…. File deleted.");
+                        try { File.Delete(destPath); } catch (Exception ex) { SessionLog.Write("DIRECT-CLEANUP", ex); }
+                        throw new InvalidDataException($"SHA-256 mismatch — expected {app.Sha256[..Math.Min(12, app.Sha256.Length)]}…, got {actual[..12]}…. File deleted.");
                     }
                 }
 
@@ -326,7 +325,8 @@ namespace CornDownloader
             Action<string> onProgress, CancellationToken ct)
         {
             long existing = 0;
-            try { if (File.Exists(partPath)) existing = new FileInfo(partPath).Length; } catch { existing = 0; }
+            try { if (File.Exists(partPath)) existing = new FileInfo(partPath).Length; }
+            catch (Exception ex) { SessionLog.Write("DL-PART", ex); }
 
             using var req = new HttpRequestMessage(HttpMethod.Get, app.DirectUrl);
             if (existing > 0) req.Headers.Range = new RangeHeaderValue(existing, null);
@@ -336,10 +336,15 @@ namespace CornDownloader
             bool resuming = existing > 0 && response.StatusCode == HttpStatusCode.PartialContent;
             if (existing > 0 && !resuming)
             {
-                // Server ignored Range (or file changed) — start over.
+                // Server ignored Range, or the .part is stale/oversized (416) — start over.
                 SessionLog.Write($"[DL] {app.Name}: server did not honour Range, restarting download");
                 existing = 0;
-                try { File.Delete(partPath); } catch { }
+                try { File.Delete(partPath); } catch (Exception ex) { SessionLog.Write("DL-PART", ex); }
+                if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
+                {
+                    await DownloadWithResumeAsync(app, destPath, partPath, onProgress, ct);   // .part is gone, so no Range header → no loop
+                    return;
+                }
             }
             response.EnsureSuccessStatusCode();
 
@@ -378,8 +383,7 @@ namespace CornDownloader
                 }
             }
 
-            if (File.Exists(destPath)) File.Delete(destPath);
-            File.Move(partPath, destPath);
+            File.Move(partPath, destPath, overwrite: true);
         }
 
         private static async Task<string> ComputeSha256Async(string path, CancellationToken ct)
@@ -406,7 +410,7 @@ namespace CornDownloader
                 SessionLog.Write($"[INSTALLER] > \"{psi.FileName}\" {psi.Arguments}");
                 using var proc = Process.Start(psi)
                     ?? throw new InvalidOperationException("Process.Start returned null — the installer could not be launched.");
-                using var reg = ct.Register(() => { try { if (!proc.HasExited) proc.Kill(true); } catch { } });
+                using var reg = ct.Register(() => { try { if (!proc.HasExited) proc.Kill(true); } catch (Exception ex) { SessionLog.Write("INSTALLER-KILL", ex); } });
                 await proc.WaitForExitAsync(CancellationToken.None);
                 SessionLog.Write($"[INSTALLER] < {ExitCodes.Describe(proc.ExitCode)}");
                 return proc.ExitCode;
@@ -437,18 +441,27 @@ namespace CornDownloader
                 try
                 {
                     InstallResult result;
-                    if (ct.IsCancellationRequested)
-                        result = new InstallResult { App = app, Status = InstallStatus.Skipped, Message = "Cancelled." };
-                    else
+                    try
                     {
-                        onAppProgress?.Invoke(app, InstallStatus.Installing, $"Starting {app.Name}...");
-                        result = await InstallAsync(app, downloadFolder, preferWinget,
-                            msg =>
-                            {
-                                var st = msg.StartsWith("Downloading") || msg.StartsWith("Resuming")
-                                    ? InstallStatus.Downloading : InstallStatus.Installing;
-                                onAppProgress?.Invoke(app, st, msg);
-                            }, ct);
+                        if (ct.IsCancellationRequested)
+                            result = new InstallResult { App = app, Status = InstallStatus.Skipped, Message = "Cancelled." };
+                        else
+                        {
+                            onAppProgress?.Invoke(app, InstallStatus.Installing, $"Starting {app.Name}...");
+                            result = await InstallAsync(app, downloadFolder, preferWinget,
+                                msg => onAppProgress?.Invoke(app,
+                                    msg.StartsWith("Downloading") || msg.StartsWith("Resuming") ? InstallStatus.Downloading : InstallStatus.Installing, msg), ct);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        result = new InstallResult { App = app, Status = InstallStatus.Skipped, Message = "Cancelled." };
+                    }
+                    catch (Exception ex)
+                    {
+                        // One app blowing up must not lose every other result or leave the UI stuck "installing".
+                        SessionLog.Write($"INSTALL:{app.Name}", ex);
+                        result = new InstallResult { App = app, Status = InstallStatus.Failed, Message = ex.Message };
                     }
 
                     lock (resultsLock) { results.Add(result); done++; }

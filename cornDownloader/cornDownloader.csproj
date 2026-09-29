@@ -11,7 +11,7 @@
     <Optimize>true</Optimize>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <ImplicitUsings>disable</ImplicitUsings>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationManifest>App.manifest</ApplicationManifest>
     <!-- WFO0003: WinForms wants DPI via SetHighDpiMode only; we declare it in the manifest
          too (Corn Systems standard — awareness is set before the process starts). -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>

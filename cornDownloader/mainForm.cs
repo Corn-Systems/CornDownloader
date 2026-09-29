@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -48,11 +49,11 @@ namespace CornDownloader
         private Button          _clearBtn;
         private Button          _cancelBtn;
         private Button          _logToggle;
+        private Button          _logClose;
         private TextBox         _searchBox;
         private Label           _wingetBadge;
         private LinkLabel       _updateLink;
         private TextBox         _folderBox;
-        private Button          _browseBtn;
         private CheckBox        _preferWingetChk;
         private RichTextBox     _logBox;
         private Panel           _logPanel;
@@ -80,19 +81,19 @@ namespace CornDownloader
             UpdateSelectionCount();
             _ = RunStartupAsync();
 
-            this.FormClosing += (s, e) =>
+            FormClosing += (s, e) =>
             {
                 _closing = true;
-                try { _cts?.Cancel(); } catch { }
-                try { _lifetimeCts.Cancel(); } catch { }
+                try { _cts?.Cancel(); _lifetimeCts.Cancel(); }
+                catch (Exception ex) { SessionLog.Write("CLOSE", ex); }   // a cancellation callback threw
                 SaveSettings();
-                try { _sharedTileTip.Dispose(); } catch { }
+                _sharedTileTip.Dispose();
             };
 
             // Also save on meaningful state changes so a crash doesn't lose settings.
-            this.ResizeEnd += (s, e) => SaveSettings();
-            if (_folderBox       != null) _folderBox.Leave              += (s, e) => SaveSettings();
-            if (_preferWingetChk != null) _preferWingetChk.CheckedChanged += (s, e) => SaveSettings();
+            ResizeEnd += (s, e) => SaveSettings();
+            _folderBox.Leave += (s, e) => SaveSettings();
+            _preferWingetChk.CheckedChanged += (s, e) => SaveSettings();
         }
 
         // Called from the single-instance watcher thread (via BeginInvoke) when a second
@@ -110,14 +111,11 @@ namespace CornDownloader
         // pop the crash dialog during shutdown.
         private void Ui(Action action)
         {
-            if (_closing || IsDisposed || !IsHandleCreated)
-            {
-                if (!IsHandleCreated && !_closing && !IsDisposed) { try { action(); } catch (Exception ex) { SessionLog.Write("UI", ex); } }
-                return;
-            }
+            if (_closing || IsDisposed) return;
             try
             {
-                if (InvokeRequired) BeginInvoke(action);
+                // Before the handle exists there is no other thread to marshal from — run inline.
+                if (IsHandleCreated && InvokeRequired) BeginInvoke(action);
                 else action();
             }
             catch (ObjectDisposedException) { }
@@ -329,25 +327,40 @@ namespace CornDownloader
             Log($"[UPGRADE] Upgrading {toUpgrade.Count} app(s) — {DateTime.Now:HH:mm:ss}");
 
             var results = new List<InstallResult>();
-            foreach (var app in toUpgrade)
+            try
             {
-                if (token.IsCancellationRequested) break;
-                var result = await _dm.UpgradeAsync(app,
-                    msg => Ui(() => { _statusLabel.Text = $"{app.Name}: {msg}"; Log($"[{app.Name}] {msg}"); _tiles[app].AppendLog(msg); }),
-                    token);
-                results.Add(result);
-                done++;
-                Ui(() =>
+                foreach (var app in toUpgrade)
                 {
-                    _overallProgress.Value = done;
-                    if (_tiles.TryGetValue(app, out var tile)) tile.SetStatus(result.Status);
-                    if (result.Status == InstallStatus.Success) _upgradeCache[app] = false;
-                });
+                    if (token.IsCancellationRequested) break;
+                    var result = await _dm.UpgradeAsync(app,
+                        msg => Ui(() =>
+                        {
+                            _statusLabel.Text = $"{app.Name}: {msg}";
+                            Log($"[{app.Name}] {msg}");
+                            if (_tiles.TryGetValue(app, out var t)) t.AppendLog(msg);
+                        }),
+                        token);
+                    results.Add(result);
+                    done++;
+                    Ui(() =>
+                    {
+                        _overallProgress.Value = done;
+                        if (_tiles.TryGetValue(app, out var tile)) tile.SetStatus(result.Status);
+                        if (result.Status == InstallStatus.Success) _upgradeCache[app] = false;
+                    });
+                }
             }
-
-            _isInstalling = false; _installBtn.Enabled = true;
-            _cancelBtn.Visible = false;
-            _cts.Dispose(); _cts = null;
+            catch (Exception ex)
+            {
+                SessionLog.Write("UPGRADE", ex);
+                Log($"[UPGRADE] aborted: {ex.Message}");
+            }
+            finally
+            {
+                _isInstalling = false; _installBtn.Enabled = true;
+                _cancelBtn.Visible = false;
+                _cts.Dispose(); _cts = null;
+            }
             int ok = results.Count(r => r.Status == InstallStatus.Success);
             int fail = results.Count(r => r.Status == InstallStatus.Failed);
             _statusLabel.Text = $"Updates done — {ok} succeeded, {fail} failed.";
@@ -497,12 +510,10 @@ namespace CornDownloader
                 if (e.SuggestedRectangle != Rectangle.Empty)
                     SetBounds(e.SuggestedRectangle.X, e.SuggestedRectangle.Y,
                               e.SuggestedRectangle.Width, e.SuggestedRectangle.Height);
-                this.MinimumSize = new Size(Dpi.S(900), Dpi.S(600));
-                RescalePanels();
+                MinimumSize = new Size(Dpi.S(900), Dpi.S(600));
+                LayoutPanels();
             };
         }
-
-        private void RescalePanels() => LayoutPanels();
 
         private void LayoutPanels()
         {
@@ -521,9 +532,7 @@ namespace CornDownloader
             if (_logPanel != null)
             {
                 _logPanel.SetBounds(0, topH + contentH, w, _logPanel.Height);
-                if (_logPanel.Visible)
-                    foreach (Control c in _logPanel.Controls)
-                        if (c is Button) c.Location = new Point(_logPanel.Width - Dpi.S(80), Dpi.S(4));
+                _logClose.Location = new Point(_logPanel.Width - Dpi.S(80), Dpi.S(4));
             }
 
             _bottomBar.SetBounds(0, h - botH, w, botH);
@@ -538,7 +547,7 @@ namespace CornDownloader
                 _logToggle.Location  = new Point(bw - Dpi.S(16) - _logToggle.Width, Dpi.S(11));
             }
 
-            if (_updateLink != null && _upgradeBtn != null)
+            if (_updateLink != null)
                 _updateLink.Location = new Point(_topBar.Width - Dpi.S(16) - _updateLink.Width, Dpi.S(22));
         }
 
@@ -573,7 +582,7 @@ namespace CornDownloader
                 Size            = new Size(Dpi.S(240), Dpi.S(28)),
                 Location        = new Point(Dpi.S(255), Dpi.S(16))
             };
-            _searchBox.TextChanged += (s, e) => FilterApps(_searchBox.Text);
+            _searchBox.TextChanged += (s, e) => PopulateApps(_activeCategory);
 
             _wingetBadge = new Label
             {
@@ -690,7 +699,6 @@ namespace CornDownloader
             recBtn.FlatAppearance.BorderSize = 0;
             recBtn.Click += (s, e) =>
             {
-                foreach (var kv in _tiles) kv.Value.IsChecked = false;
                 foreach (var kv in _tiles) kv.Value.IsChecked = kv.Key.IsRecommended;
                 UpdateSelectionCount();
             };
@@ -866,17 +874,19 @@ namespace CornDownloader
         private void PopulateApps(string category)
         {
             _appGrid.SuspendLayout();
+            // Headers are rebuilt on every keystroke; Clear() alone would leak their handles/fonts. Tiles are cached and reused.
+            foreach (var h in _appGrid.Controls.OfType<SectionHeader>().ToList()) h.Dispose();
             _appGrid.Controls.Clear();
 
             IEnumerable<AppEntry> apps = category == "All"
                 ? AppCatalog.All
                 : AppCatalog.All.Where(a => a.Category == category);
 
-            string search = _searchBox?.Text?.Trim().ToLowerInvariant() ?? "";
-            if (!string.IsNullOrEmpty(search))
-                apps = apps.Where(a => (a.Name ?? "").ToLowerInvariant().Contains(search) ||
-                                       (a.Description ?? "").ToLowerInvariant().Contains(search) ||
-                                       (a.WingetId ?? "").ToLowerInvariant().Contains(search));
+            string search = _searchBox?.Text?.Trim() ?? "";
+            if (search.Length > 0)
+                apps = apps.Where(a => (a.Name ?? "").Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                                       (a.Description ?? "").Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                                       (a.WingetId ?? "").Contains(search, StringComparison.OrdinalIgnoreCase));
 
             foreach (var group in apps.ToList().GroupBy(a => a.Category).OrderBy(g => g.Key))
             {
@@ -911,11 +921,10 @@ namespace CornDownloader
             _                          => "📦"
         };
 
-        private void FilterApps(string query) => PopulateApps(_activeCategory);
-
+        // ⚠️ Was applied to every tile, visible or not; now only the tiles in the current category/search view (CLEAR still clears all).
         private void SetAllInView(bool check)
         {
-            foreach (var tile in _tiles.Values) tile.IsChecked = check;
+            foreach (var tile in _appGrid.Controls.OfType<AppTile>()) tile.IsChecked = check;
             UpdateSelectionCount();
         }
 
@@ -949,10 +958,10 @@ namespace CornDownloader
                 Location    = new Point(Dpi.S(110), Dpi.S(11))
             };
 
-            _browseBtn = CreateGhostBtn("BROWSE", Theme.TEXT_SEC, Dpi.S(70));
-            _browseBtn.Size     = new Size(Dpi.S(70), Dpi.S(24));
-            _browseBtn.Location = new Point(Dpi.S(438), Dpi.S(11));
-            _browseBtn.Click += (s, e) =>
+            var browseBtn = CreateGhostBtn("BROWSE", Theme.TEXT_SEC, Dpi.S(70));
+            browseBtn.Size     = new Size(Dpi.S(70), Dpi.S(24));
+            browseBtn.Location = new Point(Dpi.S(438), Dpi.S(11));
+            browseBtn.Click += (s, e) =>
             {
                 using var dlg = new FolderBrowserDialog { InitialDirectory = _folderBox.Text };
                 if (dlg.ShowDialog() == DialogResult.OK) _folderBox.Text = dlg.SelectedPath;
@@ -1054,7 +1063,7 @@ namespace CornDownloader
             _logToggle.Click += (s, e) => ToggleLog();
 
             _bottomBar.Controls.AddRange(new Control[] {
-                folderLbl, _folderBox, _browseBtn, _preferWingetChk,
+                folderLbl, _folderBox, browseBtn, _preferWingetChk,
                 _overallProgress, _statusLabel, _selectionCountLabel,
                 _clearBtn, _cancelBtn, _installBtn, _logToggle
             });
@@ -1072,7 +1081,7 @@ namespace CornDownloader
 
             _logPanel = new Panel { BackColor = Theme.BG, Visible = false, Height = Dpi.S(160) };
 
-            var logClose = new Button
+            _logClose = new Button
             {
                 Text      = "✗ CLOSE",
                 Size      = new Size(Dpi.S(75), Dpi.S(22)),
@@ -1082,8 +1091,8 @@ namespace CornDownloader
                 Font      = new Font(Theme.MonoFont, 6.5f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
-            logClose.FlatAppearance.BorderSize = 0;
-            logClose.Click += (s, e) => ToggleLog();
+            _logClose.FlatAppearance.BorderSize = 0;
+            _logClose.Click += (s, e) => ToggleLog();
 
             var logOpenFolder = new Button
             {
@@ -1108,22 +1117,17 @@ namespace CornDownloader
             };
 
             _logPanel.Controls.Add(_logBox);
-            _logPanel.Controls.Add(logClose);
+            _logPanel.Controls.Add(_logClose);
             _logPanel.Controls.Add(logOpenFolder);
-            logClose.BringToFront(); logOpenFolder.BringToFront();
-            this.Controls.Add(_logPanel);
+            _logClose.BringToFront(); logOpenFolder.BringToFront();
+            Controls.Add(_logPanel);
         }
 
         private void ToggleLog()
         {
             _logPanel.Visible = !_logPanel.Visible;
             LayoutPanels();
-            if (_logPanel.Visible)
-            {
-                foreach (Control c in _logPanel.Controls)
-                    if (c is Button b && b.Text.StartsWith("✗")) b.Location = new Point(_logPanel.Width - Dpi.S(80), Dpi.S(4));
-                _logPanel.BringToFront();
-            }
+            if (_logPanel.Visible) _logPanel.BringToFront();
         }
 
         // ── Install ───────────────────────────────────────────────────────────
@@ -1156,32 +1160,41 @@ namespace CornDownloader
             bool preferWinget = _preferWingetChk.Checked;
             await WaitForBackgroundScanAsync();
 
-            _cts = new CancellationTokenSource();
-            var token = _cts.Token;
-            SetInstallingUi(true, "⏳ Installing...", selected.Count);
-            Log($"[START] Installing {selected.Count} app(s) — {DateTime.Now:HH:mm:ss}");
-
-            var results = await _dm.InstallAllAsync(selected, folder, preferWinget, OnAppProgress, OnOverallProgress, token);
-            SetInstallingUi(false, "⬇  INSTALL", 0);
-            ReportBatch(results, selected.Count);
-
-            if (token.IsCancellationRequested || _closing) return;
-
-            var pendingResults = results;
-            while (!_closing)
+            try
             {
-                using var summary = new SummaryForm(pendingResults);
-                var dr = summary.ShowDialog(this);
-                if (dr != DialogResult.Retry || summary.FailedResults.Count == 0) break;
-
-                var retryApps = summary.FailedResults.Select(r => r.App).ToList();
-                Log($"[RETRY] Retrying {retryApps.Count} failed app(s)...");
-
                 _cts = new CancellationTokenSource();
-                SetInstallingUi(true, "⏳ Retrying...", retryApps.Count);
-                pendingResults = await _dm.InstallAllAsync(retryApps, folder, preferWinget, OnAppProgress, OnOverallProgress, _cts.Token);
+                var token = _cts.Token;
+                SetInstallingUi(true, "⏳ Installing...", selected.Count);
+                Log($"[START] Installing {selected.Count} app(s) — {DateTime.Now:HH:mm:ss}");
+
+                var results = await _dm.InstallAllAsync(selected, folder, preferWinget, OnAppProgress, OnOverallProgress, token);
                 SetInstallingUi(false, "⬇  INSTALL", 0);
-                ReportBatch(pendingResults, retryApps.Count);
+                ReportBatch(results, selected.Count);
+
+                if (token.IsCancellationRequested || _closing) return;
+
+                var pendingResults = results;
+                while (!_closing)
+                {
+                    using var summary = new SummaryForm(pendingResults);
+                    var dr = summary.ShowDialog(this);
+                    if (dr != DialogResult.Retry || summary.FailedResults.Count == 0) break;
+
+                    var retryApps = summary.FailedResults.Select(r => r.App).ToList();
+                    Log($"[RETRY] Retrying {retryApps.Count} failed app(s)...");
+
+                    _cts = new CancellationTokenSource();
+                    SetInstallingUi(true, "⏳ Retrying...", retryApps.Count);
+                    pendingResults = await _dm.InstallAllAsync(retryApps, folder, preferWinget, OnAppProgress, OnOverallProgress, _cts.Token);
+                    SetInstallingUi(false, "⬇  INSTALL", 0);
+                    ReportBatch(pendingResults, retryApps.Count);
+                }
+            }
+            catch (Exception ex)
+            {
+                SessionLog.Write("INSTALL", ex);
+                Log($"[INSTALL] aborted: {ex.Message}");
+                if (!_closing) SetInstallingUi(false, "⬇  INSTALL", 0);   // never leave the UI locked in "installing"
             }
         }
 
@@ -1250,19 +1263,9 @@ namespace CornDownloader
             });
         }
 
-        private static int ParsePercent(string msg)
-        {
-            if (string.IsNullOrEmpty(msg)) return -1;
-            int idx = msg.IndexOf('%');
-            if (idx <= 0) return -1;
-            int end = idx - 1;
-            while (end >= 0 && msg[end] == ' ') end--;
-            int start = end;
-            while (start > 0 && char.IsDigit(msg[start - 1])) start--;
-            if (start > end) return -1;
-            if (int.TryParse(msg.Substring(start, end - start + 1), out int pct))
-                return Math.Clamp(pct, 0, 100);
-            return -1;
-        }
+        // "Downloading X: 42%" → 42; -1 when there's no percentage.
+        private static int ParsePercent(string msg) =>
+            !string.IsNullOrEmpty(msg) && Regex.Match(msg, @"(\d+)\s*%") is { Success: true } m && int.TryParse(m.Groups[1].Value, out int pct)
+                ? Math.Clamp(pct, 0, 100) : -1;
     }
 }

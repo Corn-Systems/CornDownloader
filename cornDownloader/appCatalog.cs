@@ -80,8 +80,6 @@ namespace CornDownloader
                 Name = "Chromium", Category = "Browsers", IconChar = "🔵",
                 Description = "Open-source base browser behind Chrome",
                 WingetId = "Hibbiki.Chromium",
-                DirectUrl = null,
-                FileName = null,
             },
 
             new AppEntry {
@@ -110,8 +108,6 @@ namespace CornDownloader
                 Name = "Git", Category = "Dev Tools", IconChar = "🔀",
                 Description = "Distributed version control system",
                 WingetId = "Git.Git",
-                DirectUrl = null,
-                FileName = null,
                 IsRecommended = true
             },
             new AppEntry {
@@ -119,24 +115,18 @@ namespace CornDownloader
                 Name = "Node.js (LTS)", Category = "Dev Tools", IconChar = "🟢",
                 Description = "JavaScript runtime for server-side development",
                 WingetId = "OpenJS.NodeJS.LTS",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Python.Python.3.12",
                 Name = "Python 3", Category = "Dev Tools", IconChar = "🐍",
                 Description = "Popular general-purpose scripting language",
                 WingetId = "Python.Python.3.12",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Microsoft.WindowsTerminal",
                 Name = "Windows Terminal", Category = "Dev Tools", IconChar = "⬛",
                 Description = "Modern terminal with tabs, GPU acceleration",
                 WingetId = "Microsoft.WindowsTerminal",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "GitHub.GitHubDesktop",
@@ -151,16 +141,12 @@ namespace CornDownloader
                 Name = "Postman", Category = "Dev Tools", IconChar = "📮",
                 Description = "API testing and development platform",
                 WingetId = "Postman.Postman",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Docker.DockerDesktop",
                 Name = "Docker Desktop", Category = "Dev Tools", IconChar = "🐳",
                 Description = "Container platform for developers",
                 WingetId = "Docker.DockerDesktop",
-                DirectUrl = null,
-                FileName = null,
             },
 
             new AppEntry {
@@ -168,8 +154,6 @@ namespace CornDownloader
                 Name = "PowerShell 7", Category = "Dev Tools", IconChar = "🔷",
                 Description = "Cross-platform task automation shell",
                 WingetId = "Microsoft.PowerShell",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── MEDIA & ENTERTAINMENT ─────────────────────────────────────────
@@ -195,32 +179,24 @@ namespace CornDownloader
                 Name = "OBS Studio", Category = "Media & Entertainment", IconChar = "📹",
                 Description = "Free streaming and screen recording software",
                 WingetId = "OBSProject.OBSStudio",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Audacity.Audacity",
                 Name = "Audacity", Category = "Media & Entertainment", IconChar = "🎙️",
                 Description = "Free multi-track audio editor and recorder",
                 WingetId = "Audacity.Audacity",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "HandBrake.HandBrake",
                 Name = "HandBrake", Category = "Media & Entertainment", IconChar = "📼",
                 Description = "Open-source video transcoder",
                 WingetId = "HandBrake.HandBrake",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "clsid2.mpc-hc",
                 Name = "MPC-HC", Category = "Media & Entertainment", IconChar = "▶️",
                 Description = "Lightweight, open-source media player",
                 WingetId = "clsid2.mpc-hc",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "k-lite-codec-pack",
@@ -235,8 +211,6 @@ namespace CornDownloader
                 Name = "iTunes", Category = "Media & Entertainment", IconChar = "🎶",
                 Description = "Apple's media player and device manager",
                 WingetId = "Apple.iTunes",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── PRODUCTIVITY ──────────────────────────────────────────────────
@@ -245,16 +219,12 @@ namespace CornDownloader
                 Name = "Notion", Category = "Productivity", IconChar = "📓",
                 Description = "All-in-one notes, docs, and project management",
                 WingetId = "Notion.Notion",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Obsidian.Obsidian",
                 Name = "Obsidian", Category = "Productivity", IconChar = "🔮",
                 Description = "Markdown-based knowledge management app",
                 WingetId = "Obsidian.Obsidian",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "SlackTechnologies.Slack",
@@ -278,16 +248,12 @@ namespace CornDownloader
                 Name = "LibreOffice", Category = "Productivity", IconChar = "📄",
                 Description = "Free open-source Office suite alternative",
                 WingetId = "TheDocumentFoundation.LibreOffice",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Notepad++.Notepad++",
                 Name = "Notepad++", Category = "Productivity", IconChar = "📝",
                 Description = "Advanced text editor for Windows",
                 WingetId = "Notepad++.Notepad++",
-                DirectUrl = null,
-                FileName = null,
                 IsRecommended = true
             },
             new AppEntry {
@@ -295,8 +261,6 @@ namespace CornDownloader
                 Name = "ShareX", Category = "Productivity", IconChar = "📸",
                 Description = "Powerful screenshot and screen recording tool",
                 WingetId = "ShareX.ShareX",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── GAMING ────────────────────────────────────────────────────────
@@ -322,24 +286,18 @@ namespace CornDownloader
                 Name = "GOG Galaxy", Category = "Gaming", IconChar = "⭐",
                 Description = "DRM-free game platform by CD Projekt",
                 WingetId = "GOG.Galaxy",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "ElectronicArts.EADesktop",
                 Name = "EA App", Category = "Gaming", IconChar = "🕹️",
                 Description = "EA's game launcher (replaces Origin)",
                 WingetId = "ElectronicArts.EADesktop",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Ubisoft.Connect",
                 Name = "Ubisoft Connect", Category = "Gaming", IconChar = "🟦",
                 Description = "Ubisoft's game launcher and storefront",
                 WingetId = "Ubisoft.Connect",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Discord.Discord",
@@ -355,16 +313,12 @@ namespace CornDownloader
                 Name = "MSI Afterburner", Category = "Gaming", IconChar = "🔥",
                 Description = "GPU overclocking and monitoring utility",
                 WingetId = "Guru3D.Afterburner",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Playnite.Playnite",
                 Name = "Playnite", Category = "Gaming", IconChar = "📚",
                 Description = "Unified game library manager",
                 WingetId = "Playnite.Playnite",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── UTILITIES & SYSTEM TOOLS ──────────────────────────────────────
@@ -373,8 +327,6 @@ namespace CornDownloader
                 Name = "7-Zip", Category = "Utilities & System Tools", IconChar = "🗜️",
                 Description = "Free, high-compression archive manager",
                 WingetId = "7zip.7zip",
-                DirectUrl = null,
-                FileName = null,
                 IsRecommended = true
             },
             new AppEntry {
@@ -382,32 +334,24 @@ namespace CornDownloader
                 Name = "Everything Search", Category = "Utilities & System Tools", IconChar = "🔍",
                 Description = "Instant file search across your entire drive",
                 WingetId = "voidtools.Everything",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "CPUID.CPU-Z",
                 Name = "CPU-Z", Category = "Utilities & System Tools", IconChar = "🖥️",
                 Description = "System hardware information tool",
                 WingetId = "CPUID.CPU-Z",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "REALiX.HWiNFO",
                 Name = "HWiNFO", Category = "Utilities & System Tools", IconChar = "📊",
                 Description = "Comprehensive hardware diagnostics and monitoring",
                 WingetId = "REALiX.HWiNFO",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "CrystalDewWorld.CrystalDiskInfo",
                 Name = "CrystalDiskInfo", Category = "Utilities & System Tools", IconChar = "💾",
                 Description = "HDD/SSD health monitoring utility",
                 WingetId = "CrystalDewWorld.CrystalDiskInfo",
-                DirectUrl = null,
-                FileName = null,
             },
 
 
@@ -416,32 +360,24 @@ namespace CornDownloader
                 Name = "WinDirStat", Category = "Utilities & System Tools", IconChar = "📂",
                 Description = "Graphical disk usage analyzer",
                 WingetId = "WinDirStat.WinDirStat",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Microsoft.Sysinternals.Autoruns",
                 Name = "Autoruns", Category = "Utilities & System Tools", IconChar = "⚙️",
                 Description = "Microsoft Sysinternals startup manager",
                 WingetId = "Microsoft.Sysinternals.Autoruns",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Malwarebytes.Malwarebytes",
                 Name = "Malwarebytes", Category = "Utilities & System Tools", IconChar = "🛡️",
                 Description = "Anti-malware and threat protection",
                 WingetId = "Malwarebytes.Malwarebytes",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Microsoft.PowerToys",
                 Name = "PowerToys", Category = "Utilities & System Tools", IconChar = "🔧",
                 Description = "Microsoft utilities for power users",
                 WingetId = "Microsoft.PowerToys",
-                DirectUrl = null,
-                FileName = null,
                 IsRecommended = true
             },
 
@@ -451,64 +387,48 @@ namespace CornDownloader
                 Name = "Rainmeter", Category = "Customization", IconChar = "🌦️",
                 Description = "Desktop customization with skins and widgets",
                 WingetId = "Rainmeter.Rainmeter",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "rocksdanister.LivelyWallpaper",
                 Name = "Lively Wallpaper", Category = "Customization", IconChar = "🖼️",
                 Description = "Animated live wallpapers for Windows",
                 WingetId = "rocksdanister.LivelyWallpaper",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "CharlesMilette.TranslucentTB",
                 Name = "TranslucentTB", Category = "Customization", IconChar = "🔲",
                 Description = "Make your taskbar transparent or blurred",
                 WingetId = "CharlesMilette.TranslucentTB",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "StartIsBack.StartAllBack",
                 Name = "StartAllBack", Category = "Customization", IconChar = "🪟",
                 Description = "Restore classic Windows taskbar and Start menu",
                 WingetId = "StartIsBack.StartAllBack",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "File-New-Project.EarTrumpet",
                 Name = "EarTrumpet", Category = "Customization", IconChar = "🔊",
                 Description = "Per-app audio volume control for taskbar",
                 WingetId = "File-New-Project.EarTrumpet",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "RamenSoftware.Windhawk",
                 Name = "Windhawk", Category = "Customization", IconChar = "🦅",
                 Description = "Mod manager for Windows system tweaks",
                 WingetId = "RamenSoftware.Windhawk",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "AmN.yasb",
                 Name = "YASB (Yet Another Status Bar)", Category = "Customization", IconChar = "📌",
                 Description = "Customizable Windows status bar replacement",
                 WingetId = "AmN.yasb",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "ModernFlyouts.ModernFlyouts",
                 Name = "ModernFlyouts", Category = "Customization", IconChar = "🎨",
                 Description = "Modern-styled volume/media overlay for Windows",
                 WingetId = "ModernFlyouts.ModernFlyouts",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── BROWSERS (additions) ──────────────────────────────────────────
@@ -517,8 +437,6 @@ namespace CornDownloader
                 Name = "Waterfox", Category = "Browsers", IconChar = "🌊",
                 Description = "Privacy-focused Firefox-based browser",
                 WingetId = "Waterfox.Waterfox",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── DEV TOOLS (additions) ─────────────────────────────────────────
@@ -527,32 +445,24 @@ namespace CornDownloader
                 Name = "PyPy", Category = "Dev Tools", IconChar = "🐇",
                 Description = "Fast, JIT-compiled Python interpreter",
                 WingetId = "PyPy.PyPy",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "JetBrains.Toolbox",
                 Name = "JetBrains Toolbox", Category = "Dev Tools", IconChar = "🧰",
                 Description = "Manage all JetBrains IDEs in one place",
                 WingetId = "JetBrains.Toolbox",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "WiresharkFoundation.Wireshark",
                 Name = "Wireshark", Category = "Dev Tools", IconChar = "🦈",
                 Description = "Network protocol analyser and packet capture",
                 WingetId = "WiresharkFoundation.Wireshark",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "JannisX11.Blockbench",
                 Name = "BlockBench", Category = "Dev Tools", IconChar = "🟫",
                 Description = "3D model editor for Minecraft and low-poly art",
                 WingetId = "JannisX11.Blockbench",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── GAMING (additions) ────────────────────────────────────────────
@@ -561,40 +471,30 @@ namespace CornDownloader
                 Name = "Overwolf", Category = "Gaming", IconChar = "🐺",
                 Description = "In-game overlay platform for apps and mods",
                 WingetId = "Overwolf.Overwolf",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Medal.Medal",
                 Name = "Medal", Category = "Gaming", IconChar = "🥇",
                 Description = "Clip and share your best gaming moments",
                 WingetId = "Medal.Medal",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "TrackerNetwork.ValorantTracker",
                 Name = "Valorant Tracker", Category = "Gaming", IconChar = "🎯",
                 Description = "Stats tracker and overlay for Valorant",
                 WingetId = "TrackerNetwork.ValorantTracker",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "PrismLauncher.PrismLauncher",
                 Name = "Prism Launcher", Category = "Gaming", IconChar = "🟩",
                 Description = "Open-source Minecraft launcher with mod support",
                 WingetId = "PrismLauncher.PrismLauncher",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Mojang.MinecraftLauncher",
                 Name = "Minecraft Launcher", Category = "Gaming", IconChar = "⛏️",
                 Description = "Official Minecraft Java & Bedrock launcher",
                 WingetId = "Mojang.MinecraftLauncher",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── UTILITIES & SYSTEM TOOLS (additions) ──────────────────────────
@@ -603,56 +503,42 @@ namespace CornDownloader
                 Name = "GPU-Z", Category = "Utilities & System Tools", IconChar = "🔬",
                 Description = "GPU hardware information and diagnostics",
                 WingetId = "TechPowerUp.GPU-Z",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "RevoUninstaller.RevoUninstaller",
                 Name = "Revo Uninstaller", Category = "Utilities & System Tools", IconChar = "🗑️",
                 Description = "Deep uninstaller that removes leftover files",
                 WingetId = "RevoUninstaller.RevoUninstaller",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "CDBurnerXP.CDBurnerXP",
                 Name = "CDBurnerXP", Category = "Utilities & System Tools", IconChar = "💿",
                 Description = "Free CD/DVD/Blu-ray burning application",
                 WingetId = "CDBurnerXP.CDBurnerXP",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "OpenVPNTechnologies.OpenVPN",
                 Name = "OpenVPN", Category = "Utilities & System Tools", IconChar = "🔒",
                 Description = "Open-source VPN client and server",
                 WingetId = "OpenVPNTechnologies.OpenVPN",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "ProtonTechnologies.ProtonVPN",
                 Name = "ProtonVPN", Category = "Utilities & System Tools", IconChar = "🔏",
                 Description = "Secure, privacy-first VPN by Proton",
                 WingetId = "ProtonTechnologies.ProtonVPN",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "WireGuard.WireGuard",
                 Name = "WireGuard", Category = "Utilities & System Tools", IconChar = "🔐",
                 Description = "Fast, modern, secure VPN tunnel",
                 WingetId = "WireGuard.WireGuard",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Microsoft.PCManager",
                 Name = "Microsoft PC Manager", Category = "Utilities & System Tools", IconChar = "🫧",
                 Description = "Microsoft's official PC cleanup and boost tool",
                 WingetId = "Microsoft.PCManager",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── PRODUCTIVITY (additions) ──────────────────────────────────────
@@ -661,16 +547,12 @@ namespace CornDownloader
                 Name = "FxSound", Category = "Productivity", IconChar = "🎚️",
                 Description = "Audio enhancer and equalizer for Windows",
                 WingetId = "FxSound.FxSound",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Anthropic.Claude",
                 Name = "Claude Desktop", Category = "Productivity", IconChar = "🧠",
                 Description = "Anthropic's Claude AI assistant desktop app",
                 WingetId = "Anthropic.Claude",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Google.Chrome",
@@ -685,24 +567,18 @@ namespace CornDownloader
                 Name = "Opera GX", Category = "Browsers", IconChar = "🎲",
                 Description = "Gaming browser with CPU/RAM limiters",
                 WingetId = "Opera.OperaGX",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Ferdium.Ferdium",
                 Name = "Ferdium", Category = "Productivity", IconChar = "📬",
                 Description = "All-in-one messaging app (Slack, WhatsApp, etc.)",
                 WingetId = "Ferdium.Ferdium",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Parsec.Parsec",
                 Name = "Parsec", Category = "Gaming", IconChar = "💻",
                 Description = "Low-latency remote desktop for gaming",
                 WingetId = "Parsec.Parsec",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── BROWSERS (new) ────────────────────────────────────────────────
@@ -711,8 +587,6 @@ namespace CornDownloader
                 Name = "Tor Browser", Category = "Browsers", IconChar = "🧅",
                 Description = "Privacy browser that routes traffic through the Tor network",
                 WingetId = "TorProject.TorBrowser",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── DEV TOOLS (new) ───────────────────────────────────────────────
@@ -721,40 +595,30 @@ namespace CornDownloader
                 Name = "Neovim", Category = "Dev Tools", IconChar = "🖊️",
                 Description = "Hyperextensible Vim-based text editor",
                 WingetId = "Neovim.Neovim",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Microsoft.WSL",
                 Name = "WSL (Windows Subsystem for Linux)", Category = "Dev Tools", IconChar = "🐧",
                 Description = "Run Linux distributions natively on Windows",
                 WingetId = "Microsoft.WSL",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Insomnia.Insomnia",
                 Name = "Insomnia", Category = "Dev Tools", IconChar = "😴",
                 Description = "Open source API client and design platform",
                 WingetId = "Insomnia.Insomnia",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "TimKosse.FileZilla.Client",
                 Name = "FileZilla", Category = "Dev Tools", IconChar = "📁",
                 Description = "Fast and reliable FTP, FTPS and SFTP client",
                 WingetId = "TimKosse.FileZilla.Client",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "HeidiSQL.HeidiSQL",
                 Name = "HeidiSQL", Category = "Dev Tools", IconChar = "🗄️",
                 Description = "Lightweight GUI for MySQL, MariaDB, PostgreSQL and more",
                 WingetId = "HeidiSQL.HeidiSQL",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── MEDIA & ENTERTAINMENT (new) ───────────────────────────────────
@@ -763,32 +627,24 @@ namespace CornDownloader
                 Name = "Plex", Category = "Media & Entertainment", IconChar = "📺",
                 Description = "Media server and player for your personal collection",
                 WingetId = "Plex.Plex",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Stremio.Stremio",
                 Name = "Stremio", Category = "Media & Entertainment", IconChar = "📡",
                 Description = "Streaming aggregator for movies, shows and web channels",
                 WingetId = "Stremio.Stremio",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "PeterPawlowski.foobar2000",
                 Name = "foobar2000", Category = "Media & Entertainment", IconChar = "🎛️",
                 Description = "Highly customizable audiophile music player",
                 WingetId = "PeterPawlowski.foobar2000",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "DuongDieuPhap.ImageGlass",
                 Name = "ImageGlass", Category = "Media & Entertainment", IconChar = "🪞",
                 Description = "Lightweight, versatile image viewer for Windows",
                 WingetId = "DuongDieuPhap.ImageGlass",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── PRODUCTIVITY (new) ────────────────────────────────────────────
@@ -797,32 +653,24 @@ namespace CornDownloader
                 Name = "Bitwarden", Category = "Productivity", IconChar = "🔑",
                 Description = "Free and open source password manager",
                 WingetId = "Bitwarden.Bitwarden",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Mozilla.Thunderbird",
                 Name = "Thunderbird", Category = "Productivity", IconChar = "⚡",
                 Description = "Free and open source email client by Mozilla",
                 WingetId = "Mozilla.Thunderbird",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Stretchly.Stretchly",
                 Name = "Stretchly", Category = "Productivity", IconChar = "🧘",
                 Description = "Break time reminder app to reduce eye strain",
                 WingetId = "Stretchly.Stretchly",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Greenshot.Greenshot",
                 Name = "Greenshot", Category = "Productivity", IconChar = "📷",
                 Description = "Lightweight screenshot tool with annotation support",
                 WingetId = "Greenshot.Greenshot",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── GAMING (new) ──────────────────────────────────────────────────
@@ -831,24 +679,18 @@ namespace CornDownloader
                 Name = "Sunshine", Category = "Gaming", IconChar = "☀️",
                 Description = "Self-hosted game streaming host (pairs with Moonlight/Parsec)",
                 WingetId = "LizardByte.Sunshine",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Microsoft.GamingApp",
                 Name = "Xbox App", Category = "Gaming", IconChar = "🏆",
                 Description = "Microsoft's official Xbox PC gaming app",
                 WingetId = "Microsoft.GamingApp",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "HeroicGamesLauncher.HeroicGamesLauncher",
                 Name = "Heroic Games Launcher", Category = "Gaming", IconChar = "🦸",
                 Description = "Open source Epic Games and GOG launcher alternative",
                 WingetId = "HeroicGamesLauncher.HeroicGamesLauncher",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── UTILITIES & SYSTEM TOOLS (new) ────────────────────────────────
@@ -857,8 +699,6 @@ namespace CornDownloader
                 Name = "Bulk Rename Utility", Category = "Utilities & System Tools", IconChar = "✏️",
                 Description = "Powerful batch file renaming tool for power users",
                 WingetId = "TGRMN.BulkRenameUtility",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 // Process Hacker was abandoned upstream and renamed System Informer.
@@ -866,40 +706,30 @@ namespace CornDownloader
                 Name = "System Informer", Category = "Utilities & System Tools", IconChar = "🪛",
                 Description = "Advanced process viewer and system monitor (successor to Process Hacker)",
                 WingetId = "WinsiderSS.SystemInformer",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Ventoy.Ventoy",
                 Name = "Ventoy", Category = "Utilities & System Tools", IconChar = "💽",
                 Description = "Create bootable USB drives for multiple ISOs at once",
                 WingetId = "Ventoy.Ventoy",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Rufus.Rufus",
                 Name = "Rufus", Category = "Utilities & System Tools", IconChar = "📀",
                 Description = "Create bootable USB drives from ISO files",
                 WingetId = "Rufus.Rufus",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "EqualizerAPO.EqualizerAPO",
                 Name = "EqualizerAPO", Category = "Utilities & System Tools", IconChar = "📻",
                 Description = "System-wide parametric audio equalizer for Windows",
                 WingetId = "EqualizerAPO.EqualizerAPO",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "M2Team.NanaZip",
                 Name = "NanaZip", Category = "Utilities & System Tools", IconChar = "🗃️",
                 Description = "Modern 7-Zip fork with Windows 11 context menu integration",
                 WingetId = "M2Team.NanaZip",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── CUSTOMIZATION (new) ───────────────────────────────────────────
@@ -908,16 +738,12 @@ namespace CornDownloader
                 Name = "Komorebi", Category = "Customization", IconChar = "🌿",
                 Description = "Tiling window manager for Windows",
                 WingetId = "LGUG2Z.komorebi",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "glzr-io.glazewm",
                 Name = "GlazeWM", Category = "Customization", IconChar = "✨",
                 Description = "Tiling window manager inspired by i3wm",
                 WingetId = "glzr-io.glazewm",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── BROWSERS (batch 2) ────────────────────────────────────────────
@@ -926,24 +752,18 @@ namespace CornDownloader
                 Name = "LibreWolf", Category = "Browsers", IconChar = "🐾",
                 Description = "Hardened Firefox fork with enhanced privacy and security",
                 WingetId = "LibreWolf.LibreWolf",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "minbrowser.min",
                 Name = "Min Browser", Category = "Browsers", IconChar = "◻️",
                 Description = "Minimal, distraction-free web browser",
                 WingetId = "minbrowser.min",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Zen-Team.Zen-Browser",
                 Name = "Zen Browser", Category = "Browsers", IconChar = "☯️",
                 Description = "Firefox-based browser with a clean, modern UI",
                 WingetId = "Zen-Team.Zen-Browser",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── DEV TOOLS (batch 2) ───────────────────────────────────────────
@@ -952,32 +772,24 @@ namespace CornDownloader
                 Name = "Visual Studio 2022 Community", Category = "Dev Tools", IconChar = "🟣",
                 Description = "Microsoft's full-featured IDE for .NET, C++, and more",
                 WingetId = "Microsoft.VisualStudio.2022.Community",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Rustlang.Rustup",
                 Name = "Rust (rustup)", Category = "Dev Tools", IconChar = "🦀",
                 Description = "Rust language toolchain installer and version manager",
                 WingetId = "Rustlang.Rustup",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "GoLang.Go",
                 Name = "Go (Golang)", Category = "Dev Tools", IconChar = "🐹",
                 Description = "Google's fast, statically typed compiled language",
                 WingetId = "GoLang.Go",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Google.AndroidStudio",
                 Name = "Android Studio", Category = "Dev Tools", IconChar = "🤖",
                 Description = "Google's official IDE for Android development",
                 WingetId = "Google.AndroidStudio",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── MEDIA & ENTERTAINMENT (batch 2) ───────────────────────────────
@@ -986,40 +798,30 @@ namespace CornDownloader
                 Name = "FreeTube", Category = "Media & Entertainment", IconChar = "🔴",
                 Description = "Private, open-source YouTube desktop client",
                 WingetId = "FreeTubeApp.FreeTube",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "GIMP.GIMP",
                 Name = "GIMP", Category = "Media & Entertainment", IconChar = "🖌️",
                 Description = "GNU Image Manipulation Program — free Photoshop alternative",
                 WingetId = "GIMP.GIMP",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Blackmagic.DaVinciResolve",
                 Name = "DaVinci Resolve", Category = "Media & Entertainment", IconChar = "✂️",
                 Description = "Professional-grade video editor with free tier",
                 WingetId = "Blackmagic.DaVinciResolve",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "streamlink.streamlink-twitch-gui",
                 Name = "Streamlink Twitch GUI", Category = "Media & Entertainment", IconChar = "💜",
                 Description = "Watch Twitch streams natively without a browser",
                 WingetId = "streamlink.streamlink-twitch-gui",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "BlenderFoundation.Blender",
                 Name = "Blender", Category = "Media & Entertainment", IconChar = "🧊",
                 Description = "Open-source 3D modeling, animation, and rendering suite",
                 WingetId = "BlenderFoundation.Blender",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── PRODUCTIVITY (batch 2) ────────────────────────────────────────
@@ -1028,8 +830,6 @@ namespace CornDownloader
                 Name = "WhatsApp Desktop", Category = "Productivity", IconChar = "💚",
                 Description = "Official WhatsApp client for Windows",
                 WingetId = "WhatsApp.WhatsApp",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── GAMING (batch 2) ──────────────────────────────────────────────
@@ -1038,8 +838,6 @@ namespace CornDownloader
                 Name = "Itch.io", Category = "Gaming", IconChar = "🎪",
                 Description = "Indie game store and launcher",
                 WingetId = "itch.itch",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "Blizzard.BattleNet",
@@ -1054,32 +852,24 @@ namespace CornDownloader
                 Name = "Rockstar Games Launcher", Category = "Gaming", IconChar = "🌟",
                 Description = "Rockstar's launcher for GTA, RDR2, and more",
                 WingetId = "Rockstar.RockstarGamesLauncher",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "NexusMods.Vortex",
                 Name = "Vortex Mod Manager", Category = "Gaming", IconChar = "🌀",
                 Description = "Nexus Mods' official mod manager for hundreds of games",
                 WingetId = "NexusMods.Vortex",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "ModOrganizer2.ModOrganizer2",
                 Name = "Mod Organizer 2", Category = "Gaming", IconChar = "🗂️",
                 Description = "Advanced mod manager for Bethesda games (Skyrim, Fallout, etc.)",
                 WingetId = "ModOrganizer2.ModOrganizer2",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "CXWorld.CapFrameX",
                 Name = "CapFrameX", Category = "Gaming", IconChar = "📈",
                 Description = "Frame time analysis and GPU benchmarking tool",
                 WingetId = "CXWorld.CapFrameX",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── UTILITIES & SYSTEM TOOLS (batch 2) ────────────────────────────
@@ -1088,24 +878,18 @@ namespace CornDownloader
                 Name = "HWMonitor", Category = "Utilities & System Tools", IconChar = "🌡️",
                 Description = "Hardware temperature, voltage, and fan speed monitor",
                 WingetId = "CPUID.HWMonitor",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "OO-Software.ShutUp10",
                 Name = "O&O ShutUp10++", Category = "Utilities & System Tools", IconChar = "🔕",
                 Description = "Windows 10/11 privacy and telemetry control tool",
                 WingetId = "OO-Software.ShutUp10",
-                DirectUrl = null,
-                FileName = null,
             },
             new AppEntry {
                 Id = "BleachBit.BleachBit",
                 Name = "BleachBit", Category = "Utilities & System Tools", IconChar = "🧹",
                 Description = "Open-source system cleaner and privacy tool",
                 WingetId = "BleachBit.BleachBit",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── CUSTOMIZATION (batch 2) ───────────────────────────────────────
@@ -1114,8 +898,6 @@ namespace CornDownloader
                 Name = "FancyZones (PowerToys)", Category = "Customization", IconChar = "📐",
                 Description = "Advanced window snapping layouts — part of Microsoft PowerToys",
                 WingetId = null,
-                DirectUrl = null,
-                FileName = null,
                 IsBundledWith = "Microsoft.PowerToys"
             },
             new AppEntry {
@@ -1123,8 +905,6 @@ namespace CornDownloader
                 Name = "ExplorerPatcher", Category = "Customization", IconChar = "🛠️",
                 Description = "Restore classic Windows 10 taskbar and UI elements on Windows 11",
                 WingetId = "valinet.ExplorerPatcher",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── GAMING (batch 3) ──────────────────────────────────────────────
@@ -1133,8 +913,6 @@ namespace CornDownloader
                 Name = "Genshin Impact", Category = "Gaming", IconChar = "⚔️",
                 Description = "Open-world gacha action RPG by HoYoverse",
                 WingetId = "miHoYo.GenshinImpact",
-                DirectUrl = null,
-                FileName = null,
             },
 
             // ── UTILITIES & SYSTEM TOOLS (batch 3) ─────────────────────────────

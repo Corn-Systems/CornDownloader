@@ -11,10 +11,9 @@ namespace CornDownloader
     public class AppTile : Panel
     {
         private bool   _checked;
-        private bool   _isInstalled    = false;
-        private bool   _hasUpdate      = false;
-        private bool   _logExpanded    = false;
-        private bool   _forceReinstall = false;
+        private bool   _isInstalled;
+        private bool   _logExpanded;
+        private bool   _forceReinstall;
 
         private readonly Color _normalBg;
         private readonly Color _checkedBg;
@@ -262,13 +261,9 @@ namespace CornDownloader
                 _versionPicker.SelectedIndexChanged += (s, e) =>
                 {
                     int idx = _versionPicker.SelectedIndex;
-                    _app.PinnedVersion = (idx == 0 || _versionPicker.Items[idx].ToString() == "latest (default)")
-                        ? null
-                        : _versionPicker.Items[idx].ToString();
-                    _versionToggle.ForeColor = _app.PinnedVersion != null ? Theme.ACCENT : Theme.MUTED;
-                    _versionToggle.Text      = _app.PinnedVersion != null
-                        ? $"v{_app.PinnedVersion.Split('.')[0]}▾"
-                        : "ver ▾";
+                    if (idx < 0) return;   // Items.Clear() while reloading the list
+                    _app.PinnedVersion = idx == 0 ? null : _versionPicker.Items[idx].ToString();
+                    RefreshVersionToggle();
                 };
             }
 
@@ -427,27 +422,36 @@ namespace CornDownloader
                 }
                 else _versionPicker.SelectedIndex = 0;
                 _versionToggle.Enabled = true;
-                _versionToggle.Text    = _app.PinnedVersion != null ? $"v{_app.PinnedVersion.Split('.')[0]}▾" : "ver ▾";
+                RefreshVersionToggle();
             }
 
             _versionPicker.Visible = show;
-            int extraH = show ? Dpi.S(VERSION_OFFSET) : 0;
-            int logH   = _logExpanded ? Dpi.S(LOG_HEIGHT) : 0;
-            Height = Dpi.S(BASE_HEIGHT) + extraH + logH;
-            _logDrawer.Location = new Point(0, Dpi.S(BASE_HEIGHT) + extraH);
             _versionPicker.Location = new Point(Dpi.S(10), Dpi.S(BASE_HEIGHT) - Dpi.S(4));
+            Relayout();
+        }
+
+        private void RefreshVersionToggle()
+        {
+            bool pinned = _app.PinnedVersion != null;
+            _versionToggle.ForeColor = pinned ? Theme.ACCENT : Theme.MUTED;
+            _versionToggle.Text      = pinned ? $"v{_app.PinnedVersion.Split('.')[0]}▾" : "ver ▾";
+        }
+
+        // Tile height = base + version picker row (if open) + log drawer (if open).
+        private void Relayout()
+        {
+            int verH = _versionPicker is { Visible: true } ? Dpi.S(VERSION_OFFSET) : 0;
+            Height = Dpi.S(BASE_HEIGHT) + verH + (_logExpanded ? Dpi.S(LOG_HEIGHT) : 0);
+            _logDrawer.Location = new Point(0, Dpi.S(BASE_HEIGHT) + verH);
         }
 
         // ── Per-app log toggle ────────────────────────────────────────────────
         private void OnLogToggleClicked(object sender, EventArgs e)
         {
             _logExpanded = !_logExpanded;
-            _logDrawer.Visible    = _logExpanded;
-            _logToggleBtn.Text    = _logExpanded ? "log ▾" : "log ▸";
-
-            int verH = (_versionPicker != null && _versionPicker.Visible) ? Dpi.S(VERSION_OFFSET) : 0;
-            Height = Dpi.S(BASE_HEIGHT) + verH + (_logExpanded ? Dpi.S(LOG_HEIGHT) : 0);
-            _logDrawer.Location = new Point(0, Dpi.S(BASE_HEIGHT) + verH);
+            _logDrawer.Visible = _logExpanded;
+            _logToggleBtn.Text = _logExpanded ? "log ▾" : "log ▸";
+            Relayout();
         }
 
         // ── Public API ────────────────────────────────────────────────────────
@@ -533,12 +537,8 @@ namespace CornDownloader
 
         public void SetHasUpdate(bool hasUpdate)
         {
-            _hasUpdate = hasUpdate;
-            if (_updateBadge != null)
-            {
-                _updateBadge.Visible = hasUpdate && !_logToggleBtn.Visible;
-                if (!hasUpdate) _statusDot.Visible = !_logToggleBtn.Visible;
-            }
+            _updateBadge.Visible = hasUpdate && !_logToggleBtn.Visible;
+            if (!hasUpdate) _statusDot.Visible = !_logToggleBtn.Visible;
             Invalidate();
         }
 
@@ -549,11 +549,61 @@ namespace CornDownloader
             int idx = _versionPicker.Items.IndexOf(version);
             if (idx < 0) { _versionPicker.Items.Add(version); idx = _versionPicker.Items.Count - 1; }
             _versionPicker.SelectedIndex = idx;
-            if (_versionToggle != null)
+            RefreshVersionToggle();
+        }
+    }
+
+    // Category divider inside the app grid: 2px accent bar, label, then a hairline rule.
+    public class SectionHeader : Panel
+    {
+        public SectionHeader(string title, string emoji)
+        {
+            Height    = Dpi.S(48);
+            Margin    = new Padding(Dpi.S(6), Dpi.S(18), Dpi.S(6), Dpi.S(4));
+            BackColor = Color.Transparent;
+            Anchor    = AnchorStyles.Left | AnchorStyles.Right;
+
+            Control lastParent = null;
+            EventHandler syncHandler = (ps, pe) =>
             {
-                _versionToggle.Text      = $"v{version.Split('.')[0]}▾";
-                _versionToggle.ForeColor = Theme.ACCENT;
-            }
+                if (lastParent != null) Width = lastParent.ClientSize.Width - Margin.Horizontal;
+            };
+            this.ParentChanged += (s, e) =>
+            {
+                if (lastParent != null) lastParent.ClientSizeChanged -= syncHandler;
+                lastParent = Parent;
+                if (lastParent != null)
+                {
+                    Width = lastParent.ClientSize.Width - Margin.Horizontal;
+                    lastParent.ClientSizeChanged += syncHandler;
+                }
+            };
+
+            var bar = new Panel
+            {
+                BackColor = Theme.ACCENT,
+                Size      = new Size(Dpi.S(2), Dpi.S(22)),
+                Location  = new Point(Dpi.S(4), Dpi.S(13))
+            };
+
+            var lbl = new Label
+            {
+                Text      = $"{emoji}  {title.ToUpper()}",
+                Font      = new Font(Theme.MonoFont, 8.5f, FontStyle.Bold),
+                ForeColor = Theme.ACCENT,
+                AutoSize  = true,
+                Location  = new Point(Dpi.S(12), Dpi.S(14)),
+                BackColor = Color.Transparent
+            };
+
+            this.Paint += (s, e) =>
+            {
+                int lineY = Height / 2 + 2;
+                using var pen = new Pen(Theme.BORDER, 1);
+                e.Graphics.DrawLine(pen, lbl.Right + Dpi.S(14), lineY, Width - Dpi.S(20), lineY);
+            };
+
+            Controls.AddRange(new Control[] { bar, lbl });
         }
     }
 }

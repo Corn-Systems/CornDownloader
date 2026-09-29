@@ -36,7 +36,8 @@ namespace CornDownloader
                     HeadlessRunner.Out($"{AppInfo.Name} is already running — refusing to start a second instance.");
                     return HeadlessRunner.ExitAlreadyRunning;
                 }
-                try { EventWaitHandle.OpenExisting(ActivateEventName).Set(); } catch { /* other instance is mid-startup */ }
+                try { using var ev = EventWaitHandle.OpenExisting(ActivateEventName); ev.Set(); }
+                catch (Exception ex) { SessionLog.Write("ACTIVATE", ex); }   // other instance is mid-startup
                 return 0;
             }
 
@@ -98,7 +99,7 @@ namespace CornDownloader
                     "You can usually keep working — if something looks wrong, restart the app.",
                     "Unexpected error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
-            catch { }
+            catch { /* crash handler: nothing left to fall back to */ }
         }
     }
 }

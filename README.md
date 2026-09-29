@@ -150,25 +150,21 @@ exit $p.ExitCode
 CornDownloader/
 ├─ Program.cs          entry point, single-instance guard, CLI dispatch, crash handler
 ├─ MainForm.cs         main window
-├─ AppTile.cs          catalog tile control
-├─ SectionHeader.cs    category divider
+├─ AppTile.cs          catalog tile control + category divider (SectionHeader)
 ├─ SummaryForm.cs      post-run summary dialog
 ├─ AppCatalog.cs       the app list (edit this to add apps)
 ├─ DownloadManager.cs  install / upgrade / download logic
 ├─ WingetRunner.cs     winget discovery, single process runner, exit-code table
 ├─ UpdateChecker.cs    GitHub Releases version check
-├─ HeadlessRunner.cs   --silent mode
-├─ CliOptions.cs       argument parser
-├─ AppPaths.cs         every on-disk path (settings, logs, crash log, Downloads)
-├─ AppSettings.cs      settings model + load/save
+├─ Cli.cs              argument parser + --silent headless runner
+├─ AppInfo.cs          name / version / repo constants + every on-disk path
+├─ AppSettings.cs      settings model + load/save, .corn selection-pack format
 ├─ SessionLog.cs       persistent daily log
-├─ AppInfo.cs          name / version / repo constants
 ├─ Theme.cs            Corn Systems palette
 ├─ Dpi.cs              shared PerMonitorV2 helper (identical across Corn Systems repos)
-├─ TaskbarBadge.cs     ITaskbarList3 overlay
-├─ AppIconBuilder.cs   window icon (embedded .ico, drawn fallback)
+├─ AppIcons.cs         window icon (embedded .ico, drawn fallback) + taskbar overlay badge
 ├─ Assets/CornDownloader.ico
-├─ app.manifest
+├─ App.manifest
 └─ CornDownloader.iss  Inno Setup script
 ```
 

@@ -89,8 +89,6 @@ namespace CornDownloader
         private static readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
         private static string _exe;
 
-        public static string ExePath => _exe;
-
         public static bool Resolve()
         {
             foreach (var candidate in Candidates())
@@ -104,7 +102,11 @@ namespace CornDownloader
                     };
                     using var p = Process.Start(psi);
                     if (p == null) continue;
-                    if (!p.WaitForExit((int)QuickTimeout.TotalMilliseconds)) { try { p.Kill(true); } catch { } continue; }
+                    if (!p.WaitForExit((int)QuickTimeout.TotalMilliseconds))
+                    {
+                        try { p.Kill(true); } catch (Exception ex) { SessionLog.Write("WINGET-KILL", ex); }
+                        continue;
+                    }
                     if (p.ExitCode == 0)
                     {
                         _exe = candidate;
@@ -138,7 +140,7 @@ namespace CornDownloader
                         .Select(d => Path.Combine(d, "winget.exe"))
                         .FirstOrDefault(File.Exists);
             }
-            catch { /* WindowsApps is ACL'd; ignore */ }
+            catch (Exception ex) { SessionLog.Write("WINGET-SCAN", ex); }   // WindowsApps is ACL'd
             if (packaged != null) yield return packaged;
 
             yield return "winget";
@@ -149,7 +151,9 @@ namespace CornDownloader
         {
             if (_exe == null) return new WingetResult { ExitCode = -1, Output = "winget not available" };
 
-            await _gate.WaitAsync(ct).ConfigureAwait(false);
+            // Cancelling while queued behind another winget call must not throw out of the batch.
+            try { await _gate.WaitAsync(ct).ConfigureAwait(false); }
+            catch (OperationCanceledException) { return new WingetResult { ExitCode = -1, Cancelled = true }; }
             try
             {
                 return await RunUngatedAsync(args, timeout, onLine, ct).ConfigureAwait(false);
@@ -200,8 +204,9 @@ namespace CornDownloader
                 proc.BeginOutputReadLine();
                 proc.BeginErrorReadLine();
 
-                var timeoutTask = Task.Delay(timeout, ct);
-                var finished    = await Task.WhenAny(exited.Task, timeoutTask).ConfigureAwait(false);
+                using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var finished = await Task.WhenAny(exited.Task, Task.Delay(timeout, delayCts.Token)).ConfigureAwait(false);
+                delayCts.Cancel();   // don't leave the timer (or the ct registration) running after a normal exit
 
                 if (finished != exited.Task)
                 {
@@ -218,7 +223,7 @@ namespace CornDownloader
             }
             catch (OperationCanceledException)
             {
-                try { if (proc != null && !proc.HasExited) proc.Kill(true); } catch { }
+                try { if (proc != null && !proc.HasExited) proc.Kill(true); } catch (Exception ex) { SessionLog.Write("WINGET-KILL", ex); }
                 return new WingetResult { ExitCode = -1, Cancelled = true, Output = Snapshot() };
             }
             catch (Exception ex)
@@ -226,10 +231,7 @@ namespace CornDownloader
                 SessionLog.Write("WINGET", ex);
                 return new WingetResult { ExitCode = -1, Output = ex.Message };
             }
-            finally
-            {
-                try { proc?.Dispose(); } catch { }
-            }
+            finally { proc?.Dispose(); }
 
             string Snapshot() { lock (output) return output.ToString(); }
         }
