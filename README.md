@@ -3,7 +3,7 @@
 > A fast, open-source Windows app installer built in C# / WinForms by **Corn Systems**.
 > Drop it on a fresh Windows install, pick your apps, and hit install — winget handles the rest.
 
-**Version:** `1.3.0`
+**Version:** `1.3.1`
 **Platform:** Windows 10 (1809+) / 11, 64-bit
 **Runtime:** none required — ships as a self-contained single exe
 **License:** MIT

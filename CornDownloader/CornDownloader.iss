@@ -20,7 +20,14 @@
 #define MyAppURL       "https://github.com/Corn-Systems/CornDownloader"
 #define MyAppExeName   "CornDownloader.exe"
 #define PublishDir     "bin\Release\net10.0-windows\win-x64\publish"
-#define MyAppVersion   GetVersionNumbersString(PublishDir + "\" + MyAppExeName)
+; Three-part version (1.3.1, not 1.3.1.0) so the installer name, Apps & features and
+; the app's own title bar all show the same string.
+#define VerMajor
+#define VerMinor
+#define VerRev
+#define VerBuild
+#define VerFull        GetVersionComponents(PublishDir + "\" + MyAppExeName, VerMajor, VerMinor, VerRev, VerBuild)
+#define MyAppVersion   Str(VerMajor) + "." + Str(VerMinor) + "." + Str(VerRev)
 
 [Setup]
 ; Fixed GUID — never change between releases; Windows (and the CornTools
