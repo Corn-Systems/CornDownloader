@@ -324,22 +324,40 @@ namespace CornDownloader
         private static async Task DownloadWithResumeAsync(AppEntry app, string destPath, string partPath,
             Action<string> onProgress, CancellationToken ct)
         {
-            long existing = 0;
-            try { if (File.Exists(partPath)) existing = new FileInfo(partPath).Length; }
+            // <file>.part.meta holds the validator (ETag / Last-Modified) of the response the
+            // .part came from. It is sent back as If-Range, so if a "latest" link now points
+            // at a newer build the server answers 200 and we start over instead of splicing
+            // two different files together. No validator → no resume.
+            string metaPath  = partPath + ".meta";
+            long   existing  = 0;
+            string validator = null;
+            try
+            {
+                if (File.Exists(partPath) && File.Exists(metaPath))
+                {
+                    existing  = new FileInfo(partPath).Length;
+                    validator = File.ReadAllText(metaPath).Trim();
+                }
+            }
             catch (Exception ex) { SessionLog.Write("DL-PART", ex); }
+            if (string.IsNullOrEmpty(validator)) existing = 0;
 
             using var req = new HttpRequestMessage(HttpMethod.Get, app.DirectUrl);
-            if (existing > 0) req.Headers.Range = new RangeHeaderValue(existing, null);
+            if (existing > 0)
+            {
+                req.Headers.Range = new RangeHeaderValue(existing, null);
+                req.Headers.TryAddWithoutValidation("If-Range", validator);
+            }
 
             using var response = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
 
             bool resuming = existing > 0 && response.StatusCode == HttpStatusCode.PartialContent;
             if (existing > 0 && !resuming)
             {
-                // Server ignored Range, or the .part is stale/oversized (416) — start over.
-                SessionLog.Write($"[DL] {app.Name}: server did not honour Range, restarting download");
+                // Server ignored Range, the file changed (If-Range → 200), or the .part is stale/oversized (416) — start over.
+                SessionLog.Write($"[DL] {app.Name}: cannot resume ({(int)response.StatusCode}), restarting download");
                 existing = 0;
-                try { File.Delete(partPath); } catch (Exception ex) { SessionLog.Write("DL-PART", ex); }
+                try { File.Delete(partPath); File.Delete(metaPath); } catch (Exception ex) { SessionLog.Write("DL-PART", ex); }
                 if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
                 {
                     await DownloadWithResumeAsync(app, destPath, partPath, onProgress, ct);   // .part is gone, so no Range header → no loop
@@ -347,6 +365,13 @@ namespace CornDownloader
                 }
             }
             response.EnsureSuccessStatusCode();
+
+            // A dead "latest" link usually redirects to a landing page; don't save HTML as Setup.exe and run it.
+            string mediaType = response.Content.Headers.ContentType?.MediaType ?? "";
+            if (mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"The download link returned a web page ({mediaType}), not an installer — the link is probably dead.");
+
+            if (!resuming) SaveValidator(response, metaPath);
 
             long? total = response.Content.Headers.ContentLength;
             if (total.HasValue) total += existing;   // ContentLength of a 206 is the remainder
@@ -384,6 +409,22 @@ namespace CornDownloader
             }
 
             File.Move(partPath, destPath, overwrite: true);
+            try { File.Delete(metaPath); } catch (Exception ex) { SessionLog.Write("DL-PART", ex); }
+        }
+
+        private static void SaveValidator(HttpResponseMessage response, string metaPath)
+        {
+            try
+            {
+                var etag = response.Headers.ETag;
+                string validator = etag != null && !etag.IsWeak
+                    ? etag.ToString()
+                    : response.Content.Headers.LastModified?.ToString("R");
+
+                if (string.IsNullOrEmpty(validator)) File.Delete(metaPath);
+                else File.WriteAllText(metaPath, validator);
+            }
+            catch (Exception ex) { SessionLog.Write("DL-PART", ex); }
         }
 
         private static async Task<string> ComputeSha256Async(string path, CancellationToken ct)

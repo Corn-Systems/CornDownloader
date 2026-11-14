@@ -34,6 +34,10 @@ namespace CornDownloader
         public static CliOptions Parse(string[] args)
         {
             var o = new CliOptions();
+            // Decide headless up front: parsing stops at the first bad argument, and a script
+            // that passed --silent must never get a dialog, wherever the flag sits.
+            o.Silent = args.Any(x => x.Equals("--silent", StringComparison.OrdinalIgnoreCase) ||
+                                     x.Equals("--headless", StringComparison.OrdinalIgnoreCase));
             for (int i = 0; i < args.Length; i++)
             {
                 string a = args[i];
@@ -120,10 +124,17 @@ namespace CornDownloader
                 Out(u == null ? "update check failed (offline?)"
                   : u.IsNewer ? $"update available: {u.LatestTag} (current {AppInfo.Version}) → {u.ReleaseUrl}"
                   : $"up to date ({AppInfo.Version})");
-                if (!opts.HasSelection) return ExitOk;
+                if (!opts.Silent || !opts.HasSelection) return ExitOk;
             }
 
-            var selection = ResolveSelection(opts, out var missing);
+            List<AppEntry> selection;
+            List<string>   missing;
+            try { selection = ResolveSelection(opts, out missing); }
+            catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+            {
+                Out($"cannot read pack '{opts.PackPath}': {ex.Message}");
+                return ExitBadArgs;
+            }
             foreach (var m in missing) Out($"warn: '{m}' not in catalog — skipped");
             if (selection.Count == 0) { Out("nothing to install."); return ExitNothing; }
 

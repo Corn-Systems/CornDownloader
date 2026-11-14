@@ -25,8 +25,8 @@ namespace CornDownloader
         public const int WingetInstallCancelledByUser  = unchecked((int)0x8A15010C);
 
         // Windows Installer / most EXE installers
-        public const int MsiRebootRequired  = 1641;
-        public const int MsiRebootInitiated = 3010;
+        public const int MsiRebootInitiated = 1641;   // ERROR_SUCCESS_REBOOT_INITIATED
+        public const int MsiRebootRequired  = 3010;   // ERROR_SUCCESS_REBOOT_REQUIRED
         public const int MsiAnotherInstallInProgress = 1618;
         public const int UacDeclined        = 1223;   // ERROR_CANCELLED from ShellExecute("runas")
 

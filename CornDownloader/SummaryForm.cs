@@ -13,7 +13,7 @@ namespace CornDownloader
         public List<InstallResult> FailedResults { get; } = new();
         private readonly ToolTip _tip = new ToolTip();
 
-        public SummaryForm(List<InstallResult> results)
+        public SummaryForm(List<InstallResult> results, bool allowRetry = true)
         {
             int  ok     = results.Count(r => r.Status == InstallStatus.Success);
             int  fail   = results.Count(r => r.Status == InstallStatus.Failed);
@@ -32,12 +32,13 @@ namespace CornDownloader
             try { this.Icon = AppIconBuilder.Get(); } catch (Exception ex) { SessionLog.Write("ICON", ex); }
 
             var header = new Panel { BackColor = Theme.SURFACE, Dock = DockStyle.Top, Height = Dpi.S(70) };
-            bool allOk = fail == 0;
             header.Controls.Add(new Label
             {
-                Text      = allOk ? "✔  All apps installed!" : $"⚠  {fail} installation{(fail == 1 ? "" : "s")} failed",
+                Text      = fail > 0 ? $"⚠  {fail} installation{(fail == 1 ? "" : "s")} failed"
+                          : ok > 0   ? "✔  All apps installed!"
+                          :            "Nothing was installed",
                 Font      = new Font(Theme.MonoFont, 11f, FontStyle.Bold),
-                ForeColor = allOk ? Theme.SUCCESS : Theme.DANGER,
+                ForeColor = fail > 0 ? Theme.DANGER : ok > 0 ? Theme.SUCCESS : Theme.TEXT_SEC,
                 AutoSize  = true,
                 Location  = new Point(Dpi.S(18), Dpi.S(14))
             });
@@ -95,7 +96,7 @@ namespace CornDownloader
             closeBtn.Click   += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
             footer.Controls.Add(closeBtn);
 
-            if (fail > 0)
+            if (fail > 0 && allowRetry)
             {
                 var retryBtn = new Button
                 {

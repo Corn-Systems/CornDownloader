@@ -91,7 +91,5 @@ Name: "{autodesktop}\{#MyAppName}";     Filename: "{app}\{#MyAppExeName}"; Worki
 ; report "winget not found" on first launch.
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
-[UninstallDelete]
-; Leave %AppData%\CornSystems\CornDownloader alone (per-user settings + logs;
-; survives reinstall). Only sweep leftovers inside the install dir.
-Type: files; Name: "{app}\*.log"
+; No [UninstallDelete]: the app writes nothing into {app}. Per-user settings and logs
+; live in %AppData%\CornSystems\CornDownloader and are left alone on uninstall.

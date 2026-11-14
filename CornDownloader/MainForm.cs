@@ -232,8 +232,12 @@ namespace CornDownloader
 
         private void SaveSettings()
         {
-            _settings.DownloadFolder = _folderBox?.Text.Trim() ?? "";
-            _settings.PreferWinget   = _preferWingetChk?.Checked ?? true;
+            // Command-line overrides (--folder, --no-winget) apply to this run only, and a
+            // launch where winget wasn't found must not flip the saved preference off.
+            if (_folderBox != null && _cli?.Folder == null)
+                _settings.DownloadFolder = _folderBox.Text.Trim();
+            if (_preferWingetChk != null && _preferWingetChk.Enabled && !(_cli?.NoWinget ?? false))
+                _settings.PreferWinget = _preferWingetChk.Checked;
             _settings.WindowState    = this.WindowState == FormWindowState.Maximized ? "Maximized" : "Normal";
             if (this.WindowState == FormWindowState.Normal)
             {
@@ -291,6 +295,7 @@ namespace CornDownloader
                 {
                     _upgradeBtn.Visible = count > 0;
                     _upgradeBtn.Text    = $"⬆  Update {count} App{(count == 1 ? "" : "s")}";
+                    LayoutPanels();
                 }
                 foreach (var kv in _tiles)
                     if (_upgradeCache.TryGetValue(kv.Key, out bool u)) kv.Value.SetHasUpdate(u);
@@ -315,6 +320,7 @@ namespace CornDownloader
             var toUpgrade = _upgradeCache.Where(kv => kv.Value).Select(kv => kv.Key).ToList();
             if (toUpgrade.Count == 0) return;
 
+            _isInstalling = true;   // claim the slot before the first await so a second click can't start another batch
             await WaitForBackgroundScanAsync();
 
             _cts = new CancellationTokenSource();
@@ -361,6 +367,8 @@ namespace CornDownloader
                 _cancelBtn.Visible = false;
                 _cts.Dispose(); _cts = null;
             }
+            if (_closing || IsDisposed) return;   // window closed mid-upgrade — nothing left to update
+
             int ok = results.Count(r => r.Status == InstallStatus.Success);
             int fail = results.Count(r => r.Status == InstallStatus.Failed);
             _statusLabel.Text = $"Updates done — {ok} succeeded, {fail} failed.";
@@ -370,10 +378,11 @@ namespace CornDownloader
             _upgradeBtn.Visible = remaining > 0;
             _upgradeBtn.Text    = remaining > 0 ? $"⬆  Update {remaining} App{(remaining == 1 ? "" : "s")}" : "";
             _upgradeBtn.Enabled = remaining > 0;
+            LayoutPanels();
 
-            if (!token.IsCancellationRequested && !_closing)
+            if (!token.IsCancellationRequested)
             {
-                using var summary = new SummaryForm(results);
+                using var summary = new SummaryForm(results, allowRetry: false);
                 summary.ShowDialog(this);
             }
         }
@@ -547,8 +556,15 @@ namespace CornDownloader
                 _logToggle.Location  = new Point(bw - Dpi.S(16) - _logToggle.Width, Dpi.S(11));
             }
 
-            if (_updateLink != null)
+            if (_updateLink != null && _upgradeBtn != null)
+            {
                 _updateLink.Location = new Point(_topBar.Width - Dpi.S(16) - _updateLink.Width, Dpi.S(22));
+
+                // Keep the upgrade button clear of the update link on narrow windows.
+                int rightEdge = _updateLink.Visible ? _updateLink.Left - Dpi.S(12) : _topBar.Width - Dpi.S(16);
+                _upgradeBtn.Left = Math.Max(_wingetBadge.Right + Dpi.S(12),
+                                            Math.Min(Dpi.S(700), rightEdge - _upgradeBtn.Width));
+            }
         }
 
         // ── Top bar ───────────────────────────────────────────────────────────
@@ -921,7 +937,7 @@ namespace CornDownloader
             _                          => "📦"
         };
 
-        // ⚠️ Was applied to every tile, visible or not; now only the tiles in the current category/search view (CLEAR still clears all).
+        // Acts on the tiles in the current category/search view only (CLEAR clears everything).
         private void SetAllInView(bool check)
         {
             foreach (var tile in _appGrid.Controls.OfType<AppTile>()) tile.IsChecked = check;
@@ -1158,6 +1174,7 @@ namespace CornDownloader
             }
 
             bool preferWinget = _preferWingetChk.Checked;
+            _isInstalling = true;   // claim the slot before the first await so a second click can't start another batch
             await WaitForBackgroundScanAsync();
 
             try
@@ -1228,6 +1245,12 @@ namespace CornDownloader
             {
                 tile.SetStatus(status);
                 tile.AppendLog(msg);
+                if (status == InstallStatus.Success)
+                {
+                    // Reflect the install straight away instead of waiting for the next launch's scan.
+                    _installedCache[app] = true;
+                    tile.SetInstalled(true);
+                }
                 int pct = ParsePercent(msg);
                 if (pct >= 0 && (status == InstallStatus.Installing || status == InstallStatus.Downloading))
                     tile.SetProgress(pct);

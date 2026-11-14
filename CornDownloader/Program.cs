@@ -23,9 +23,15 @@ namespace CornDownloader
             if (opts.Error != null)
             {
                 HeadlessRunner.Out("error: " + opts.Error);
-                if (!opts.Headless) MessageBox.Show(opts.Error + "\n\n" + CliOptions.HelpText, AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                // Dialog only for a GUI launch with nowhere else to report it (e.g. a bad shortcut).
+                if (!opts.Headless && !HeadlessRunner.ConsoleAttached) MessageBox.Show(opts.Error + "\n\n" + CliOptions.HelpText, AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return HeadlessRunner.ExitBadArgs;
             }
+
+            // --check-update on its own only talks to GitHub, so it neither needs the
+            // single-instance lock nor should it open the window.
+            if (opts.CheckUpdate && !opts.Silent)
+                return HeadlessRunner.Run(opts);
 
             // Single instance — two copies would race on settings.json and, worse, on winget.
             using var mutex = new Mutex(initiallyOwned: true, MutexName, out bool isFirst);

@@ -9,7 +9,6 @@
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
     <Optimize>true</Optimize>
-    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <ImplicitUsings>disable</ImplicitUsings>
     <ApplicationManifest>App.manifest</ApplicationManifest>
     <!-- WFO0003: WinForms wants DPI via SetHighDpiMode only; we declare it in the manifest

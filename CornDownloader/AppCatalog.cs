@@ -161,9 +161,8 @@ namespace CornDownloader
                 Id = "VideoLAN.VLC",
                 Name = "VLC Media Player", Category = "Media & Entertainment", IconChar = "🎬",
                 Description = "Universal media player, plays everything",
+                // No DirectUrl: VideoLAN only publishes versioned file names, there is no stable "latest" exe link.
                 WingetId = "VideoLAN.VLC",
-                DirectUrl = "https://get.videolan.org/vlc/last/win64/",
-                FileName = "VLCSetup.exe",
                 IsRecommended = true
             },
             new AppEntry {
@@ -202,9 +201,8 @@ namespace CornDownloader
                 Id = "k-lite-codec-pack",
                 Name = "K-Lite Codec Pack", Category = "Media & Entertainment", IconChar = "🎞️",
                 Description = "Complete codec pack for media playback",
-                WingetId = null,
-                DirectUrl = "https://files2.codecguide.com/K-Lite_Codec_Pack_1865_Basic.exe",
-                FileName = "KLiteCodecPack.exe",
+                // The old version-pinned codecguide.com link 404s; the Basic pack is on winget.
+                WingetId = "CodecGuide.K-LiteCodecPack.Basic",
             },
             new AppEntry {
                 Id = "Apple.iTunes",
@@ -231,7 +229,7 @@ namespace CornDownloader
                 Name = "Slack", Category = "Productivity", IconChar = "💬",
                 Description = "Team messaging and collaboration platform",
                 WingetId = "SlackTechnologies.Slack",
-                DirectUrl = "https://slack.com/downloads/windows",
+                DirectUrl = "https://slack.com/api/desktop.latestRelease?arch=x64&variant=exe&redirect=true",
                 FileName = "SlackSetup.exe",
             },
 
@@ -444,7 +442,7 @@ namespace CornDownloader
                 Id = "PyPy.PyPy",
                 Name = "PyPy", Category = "Dev Tools", IconChar = "🐇",
                 Description = "Fast, JIT-compiled Python interpreter",
-                WingetId = "PyPy.PyPy",
+                WingetId = "PyPy.PyPy.3.11",
             },
             new AppEntry {
                 Id = "JetBrains.Toolbox",
@@ -467,22 +465,10 @@ namespace CornDownloader
 
             // ── GAMING (additions) ────────────────────────────────────────────
             new AppEntry {
-                Id = "Overwolf.Overwolf",
-                Name = "Overwolf", Category = "Gaming", IconChar = "🐺",
-                Description = "In-game overlay platform for apps and mods",
-                WingetId = "Overwolf.Overwolf",
-            },
-            new AppEntry {
                 Id = "Medal.Medal",
                 Name = "Medal", Category = "Gaming", IconChar = "🥇",
                 Description = "Clip and share your best gaming moments",
-                WingetId = "Medal.Medal",
-            },
-            new AppEntry {
-                Id = "TrackerNetwork.ValorantTracker",
-                Name = "Valorant Tracker", Category = "Gaming", IconChar = "🎯",
-                Description = "Stats tracker and overlay for Valorant",
-                WingetId = "TrackerNetwork.ValorantTracker",
+                WingetId = "MedalB.V.Medal",
             },
             new AppEntry {
                 Id = "PrismLauncher.PrismLauncher",
@@ -511,12 +497,6 @@ namespace CornDownloader
                 WingetId = "RevoUninstaller.RevoUninstaller",
             },
             new AppEntry {
-                Id = "CDBurnerXP.CDBurnerXP",
-                Name = "CDBurnerXP", Category = "Utilities & System Tools", IconChar = "💿",
-                Description = "Free CD/DVD/Blu-ray burning application",
-                WingetId = "CDBurnerXP.CDBurnerXP",
-            },
-            new AppEntry {
                 Id = "OpenVPNTechnologies.OpenVPN",
                 Name = "OpenVPN", Category = "Utilities & System Tools", IconChar = "🔒",
                 Description = "Open-source VPN client and server",
@@ -526,7 +506,7 @@ namespace CornDownloader
                 Id = "ProtonTechnologies.ProtonVPN",
                 Name = "ProtonVPN", Category = "Utilities & System Tools", IconChar = "🔏",
                 Description = "Secure, privacy-first VPN by Proton",
-                WingetId = "ProtonTechnologies.ProtonVPN",
+                WingetId = "Proton.ProtonVPN",
             },
             new AppEntry {
                 Id = "WireGuard.WireGuard",
@@ -538,7 +518,7 @@ namespace CornDownloader
                 Id = "Microsoft.PCManager",
                 Name = "Microsoft PC Manager", Category = "Utilities & System Tools", IconChar = "🫧",
                 Description = "Microsoft's official PC cleanup and boost tool",
-                WingetId = "Microsoft.PCManager",
+                WingetId = "9PM860492SZD",   // Microsoft Store product id — not in the winget community source
             },
 
             // ── PRODUCTIVITY (additions) ──────────────────────────────────────
@@ -607,12 +587,6 @@ namespace CornDownloader
                 Name = "Insomnia", Category = "Dev Tools", IconChar = "😴",
                 Description = "Open source API client and design platform",
                 WingetId = "Insomnia.Insomnia",
-            },
-            new AppEntry {
-                Id = "TimKosse.FileZilla.Client",
-                Name = "FileZilla", Category = "Dev Tools", IconChar = "📁",
-                Description = "Fast and reliable FTP, FTPS and SFTP client",
-                WingetId = "TimKosse.FileZilla.Client",
             },
             new AppEntry {
                 Id = "HeidiSQL.HeidiSQL",
@@ -684,7 +658,7 @@ namespace CornDownloader
                 Id = "Microsoft.GamingApp",
                 Name = "Xbox App", Category = "Gaming", IconChar = "🏆",
                 Description = "Microsoft's official Xbox PC gaming app",
-                WingetId = "Microsoft.GamingApp",
+                WingetId = "9MV0B5HZVK9Z",   // Microsoft Store product id — not in the winget community source
             },
             new AppEntry {
                 Id = "HeroicGamesLauncher.HeroicGamesLauncher",
@@ -698,7 +672,7 @@ namespace CornDownloader
                 Id = "TGRMN.BulkRenameUtility",
                 Name = "Bulk Rename Utility", Category = "Utilities & System Tools", IconChar = "✏️",
                 Description = "Powerful batch file renaming tool for power users",
-                WingetId = "TGRMN.BulkRenameUtility",
+                WingetId = "TGRMNSoftware.BulkRenameUtility",
             },
             new AppEntry {
                 // Process Hacker was abandoned upstream and renamed System Informer.
@@ -718,12 +692,6 @@ namespace CornDownloader
                 Name = "Rufus", Category = "Utilities & System Tools", IconChar = "📀",
                 Description = "Create bootable USB drives from ISO files",
                 WingetId = "Rufus.Rufus",
-            },
-            new AppEntry {
-                Id = "EqualizerAPO.EqualizerAPO",
-                Name = "EqualizerAPO", Category = "Utilities & System Tools", IconChar = "📻",
-                Description = "System-wide parametric audio equalizer for Windows",
-                WingetId = "EqualizerAPO.EqualizerAPO",
             },
             new AppEntry {
                 Id = "M2Team.NanaZip",
@@ -757,7 +725,7 @@ namespace CornDownloader
                 Id = "minbrowser.min",
                 Name = "Min Browser", Category = "Browsers", IconChar = "◻️",
                 Description = "Minimal, distraction-free web browser",
-                WingetId = "minbrowser.min",
+                WingetId = "MinBrowser.Min",
             },
             new AppEntry {
                 Id = "Zen-Team.Zen-Browser",
@@ -797,7 +765,7 @@ namespace CornDownloader
                 Id = "FreeTubeApp.FreeTube",
                 Name = "FreeTube", Category = "Media & Entertainment", IconChar = "🔴",
                 Description = "Private, open-source YouTube desktop client",
-                WingetId = "FreeTubeApp.FreeTube",
+                WingetId = "FreeTube.FreeTube",
             },
             new AppEntry {
                 Id = "GIMP.GIMP",
@@ -806,16 +774,10 @@ namespace CornDownloader
                 WingetId = "GIMP.GIMP",
             },
             new AppEntry {
-                Id = "Blackmagic.DaVinciResolve",
-                Name = "DaVinci Resolve", Category = "Media & Entertainment", IconChar = "✂️",
-                Description = "Professional-grade video editor with free tier",
-                WingetId = "Blackmagic.DaVinciResolve",
-            },
-            new AppEntry {
                 Id = "streamlink.streamlink-twitch-gui",
                 Name = "Streamlink Twitch GUI", Category = "Media & Entertainment", IconChar = "💜",
                 Description = "Watch Twitch streams natively without a browser",
-                WingetId = "streamlink.streamlink-twitch-gui",
+                WingetId = "Streamlink.Streamlink.TwitchGui",
             },
             new AppEntry {
                 Id = "BlenderFoundation.Blender",
@@ -829,7 +791,7 @@ namespace CornDownloader
                 Id = "WhatsApp.WhatsApp",
                 Name = "WhatsApp Desktop", Category = "Productivity", IconChar = "💚",
                 Description = "Official WhatsApp client for Windows",
-                WingetId = "WhatsApp.WhatsApp",
+                WingetId = "9NKSQGP7F2NH",   // Microsoft Store product id — not in the winget community source
             },
 
             // ── GAMING (batch 2) ──────────────────────────────────────────────
@@ -837,7 +799,7 @@ namespace CornDownloader
                 Id = "itch.itch",
                 Name = "Itch.io", Category = "Gaming", IconChar = "🎪",
                 Description = "Indie game store and launcher",
-                WingetId = "itch.itch",
+                WingetId = "ItchIo.Itch",
             },
             new AppEntry {
                 Id = "Blizzard.BattleNet",
@@ -851,7 +813,7 @@ namespace CornDownloader
                 Id = "Rockstar.RockstarGamesLauncher",
                 Name = "Rockstar Games Launcher", Category = "Gaming", IconChar = "🌟",
                 Description = "Rockstar's launcher for GTA, RDR2, and more",
-                WingetId = "Rockstar.RockstarGamesLauncher",
+                WingetId = "RockstarGames.Launcher",
             },
             new AppEntry {
                 Id = "NexusMods.Vortex",
@@ -863,7 +825,7 @@ namespace CornDownloader
                 Id = "ModOrganizer2.ModOrganizer2",
                 Name = "Mod Organizer 2", Category = "Gaming", IconChar = "🗂️",
                 Description = "Advanced mod manager for Bethesda games (Skyrim, Fallout, etc.)",
-                WingetId = "ModOrganizer2.ModOrganizer2",
+                WingetId = "ModOrganizer2.modorganizer",
             },
             new AppEntry {
                 Id = "CXWorld.CapFrameX",
@@ -905,14 +867,6 @@ namespace CornDownloader
                 Name = "ExplorerPatcher", Category = "Customization", IconChar = "🛠️",
                 Description = "Restore classic Windows 10 taskbar and UI elements on Windows 11",
                 WingetId = "valinet.ExplorerPatcher",
-            },
-
-            // ── GAMING (batch 3) ──────────────────────────────────────────────
-            new AppEntry {
-                Id = "miHoYo.GenshinImpact",
-                Name = "Genshin Impact", Category = "Gaming", IconChar = "⚔️",
-                Description = "Open-world gacha action RPG by HoYoverse",
-                WingetId = "miHoYo.GenshinImpact",
             },
 
             // ── UTILITIES & SYSTEM TOOLS (batch 3) ─────────────────────────────

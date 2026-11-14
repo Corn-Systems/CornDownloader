@@ -7,6 +7,20 @@ All notable changes to Corn Downloader since **1.2.0**. Format follows [Keep a C
 Cleanup pass on top of 1.3.0 — bug fixes, dead-code removal and a smaller file layout. No new features.
 
 ### Fixed
+- **Double-click on Install / Update** could start two batches at once: the "busy" flag was only set after waiting for the background scan.
+- **`--check-update` without `--silent`** opened the main window instead of printing the result and exiting, and was refused with "already running" while the GUI was open.
+- **Tile badges overlapped:** an installed app with an update drew "✔ Installed" and "⬆ update available" on top of each other.
+- **Update summary had a dead Retry button** (only the install flow ever acted on it). A run where nothing succeeded or failed no longer says "All apps installed!".
+- **Saved settings:** a launch where winget wasn't found permanently switched *prefer winget* off, and `--folder` / `--no-winget` leaked into `settings.json`.
+- **Exit-code names:** 1641 and 3010 were swapped (1641 is "reboot initiated", 3010 is "reboot required"), so the log described them the wrong way round.
+- **Resume could corrupt a download** when a "latest" link moved to a newer build between attempts. The partial file's ETag / Last-Modified is now stored (`.part.meta`) and sent as `If-Range`; without a validator the download restarts.
+- **Dead links ran as installers:** a link that returns an HTML page is now rejected instead of being saved as `Setup.exe` and launched.
+- **Ghost catalog links:** VLC (directory listing, direct link dropped — winget only), Slack (landing page → real installer redirect), K-Lite Codec Pack (404 → winget `CodecGuide.K-LiteCodecPack.Basic`).
+- **Dead winget IDs** (checked against the live source with `winget show --exact`): Medal, Proton VPN, Bulk Rename Utility, Min, FreeTube, Streamlink Twitch GUI, itch, Rockstar Games Launcher, Mod Organizer 2 and PyPy moved to their current IDs; Xbox App, WhatsApp and Microsoft PC Manager now use their Microsoft Store product IDs. Catalog `Id`s are unchanged, so exported packs still match.
+- **`--silent` with a bad argument popped an error dialog** when the bad argument came before `--silent` (parsing stopped before the flag was seen), hanging unattended scripts. Headless is now decided before parsing, and the dialog is also skipped whenever a console is attached.
+- A missing or unreadable `--pack` file in headless mode exits with code 2 (bad arguments) instead of 1.
+- Top bar: the upgrade button no longer sits under the update link on narrow windows.
+- Tiles are marked installed as soon as an install succeeds instead of on the next launch.
 - **Cancelling while queued:** cancelling an install while an app was waiting behind another winget call threw out of the whole batch and left the UI stuck on "installing". It now returns a normal cancelled result.
 - **One failing app no longer sinks the batch:** an unexpected exception during one app's install used to discard every other result. It is now logged and reported as a failure for that app only.
 - **UI no longer locks after an error:** the Install and Update click handlers reset the buttons, cancel button and token if anything throws.
@@ -25,17 +39,19 @@ Cleanup pass on top of 1.3.0 — bug fixes, dead-code removal and a smaller file
 - Headless mode passes no overall-progress callback instead of a no-op lambda.
 
 ### Removed
-- Dead code: `RetryPasses`, `WingetRunner.ExePath`, `AppTile._hasUpdate`, `MainForm.RescalePanels`, `MainForm.FilterApps`, the unused `_browseBtn` field.
+- **Seven catalog apps that can no longer be installed** (no winget package, no working direct link): Overwolf, Valorant Tracker, CDBurnerXP, FileZilla, EqualizerAPO, DaVinci Resolve, Genshin Impact. The catalog is now 120 apps; packs that reference them import with a "not found in the catalog" notice.
+- Dead code: `RetryPasses`, `WingetRunner.ExePath`, `AppTile._hasUpdate`, `MainForm.RescalePanels`, `MainForm.FilterApps`, the unused `_browseBtn` field, `UpdateInfo.AssetUrl`.
+- Leftovers: the `!bin/Release/**/*.exe` exception and unused patterns in `.gitignore`, the no-op `[UninstallDelete]` section in the installer script.
 - 222 redundant `DirectUrl = null` / `FileName = null` initialisers in the catalog.
 
 ### Project structure
 - Files merged (20 → 15 `.cs` files): `AppPaths` → `AppInfo.cs`; `SelectionPack` → `AppSettings.cs`; `AppIconBuilder` + `TaskbarBadge` → `AppIcons.cs`; `CliOptions` + `HeadlessRunner` → `Cli.cs`; `SectionHeader` → `AppTile.cs`.
-- All file names are now PascalCase: `MainForm.cs`, `Program.cs`, `DownloadManager.cs`, `AppCatalog.cs`, `App.manifest`, `CornDownloader.csproj`, `CornDownloader.sln`.
+- All file names are now PascalCase in git as well as on disk: the `CornDownloader/` folder, `MainForm.cs`, `Program.cs`, `DownloadManager.cs`, `AppCatalog.cs`, `App.manifest`, `CornDownloader.csproj`, `CornDownloader.sln`.
 - README project-layout section updated to match; this changelog added.
 
 ## [1.3.0]
 
-Development between 2026-08-28 and 2026-09-12 (`v1.3.0` is not tagged yet; the version is set in `CornDownloader.csproj`).
+Development between 2026-08-28 and 2026-09-29, tagged `v1.3.0`.
 
 ### Added
 - **Installer:** Inno Setup script (`CornDownloader.iss`) producing `CornDownloader-Setup-<version>.exe` — per-machine install to `Program Files`, Start Menu + Desktop shortcuts, *Apps & features* uninstall entry.

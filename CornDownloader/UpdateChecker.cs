@@ -11,7 +11,6 @@ namespace CornDownloader
         public bool   IsNewer     { get; init; }
         public string LatestTag   { get; init; }
         public string ReleaseUrl  { get; init; }
-        public string AssetUrl    { get; init; }   // first .exe asset, if any
     }
 
     // Non-blocking check against GitHub Releases. Never throws; returns null when the
@@ -44,19 +43,9 @@ namespace CornDownloader
                 string html = root.TryGetProperty("html_url", out var h) ? h.GetString() : AppInfo.ReleasesUrl;
                 if (string.IsNullOrWhiteSpace(tag)) return null;
 
-                string asset = null;
-                if (root.TryGetProperty("assets", out var assets))
-                    foreach (var a in assets.EnumerateArray())
-                    {
-                        string name = a.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
-                        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                            a.TryGetProperty("browser_download_url", out var dl))
-                        { asset = dl.GetString(); break; }
-                    }
-
                 bool newer = IsNewer(tag, AppInfo.Version);
                 SessionLog.Write($"[UPDATE] latest={tag} current={AppInfo.Version} newer={newer}");
-                return new UpdateInfo { IsNewer = newer, LatestTag = tag, ReleaseUrl = html, AssetUrl = asset };
+                return new UpdateInfo { IsNewer = newer, LatestTag = tag, ReleaseUrl = html };
             }
             catch (OperationCanceledException) { return null; }
             catch (Exception ex)

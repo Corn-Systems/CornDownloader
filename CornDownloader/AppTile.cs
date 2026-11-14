@@ -527,7 +527,7 @@ namespace CornDownloader
                 _app.ForceReinstall = false;
                 _statusDot.Text    = "✔ Installed";
                 _statusDot.ForeColor = Theme.SUCCESS;
-                _statusDot.Visible = true;
+                _statusDot.Visible = !_logToggleBtn.Visible;   // the log button shares this row
                 BackColor          = _normalBg;
                 _checked           = false;
                 Cursor             = Cursors.Hand;
@@ -537,8 +537,10 @@ namespace CornDownloader
 
         public void SetHasUpdate(bool hasUpdate)
         {
-            _updateBadge.Visible = hasUpdate && !_logToggleBtn.Visible;
-            if (!hasUpdate) _statusDot.Visible = !_logToggleBtn.Visible;
+            // Status dot, update badge and log button all share one row — show exactly one.
+            bool logRow = _logToggleBtn.Visible;
+            _updateBadge.Visible = hasUpdate && !logRow;
+            _statusDot.Visible   = !hasUpdate && !logRow;
             Invalidate();
         }
 

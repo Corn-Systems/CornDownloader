@@ -26,7 +26,7 @@ Grab `CornDownloader.exe` from the same release and run it from anywhere. No ins
 ## Features
 
 ### ⬇ Dual Install Methods
-Every catalog entry supports **winget** (preferred, silent) or a **direct URL** download as a fallback. Corn Downloader locates winget at launch — including when the per-user alias is missing (elevated launches, other accounts) — and switches modes automatically. Direct installs are silent (`/S /passive /norestart`, or a per-app override) and request UAC once each, one at a time.
+Apps install through **winget** (preferred, silent). Entries that also carry a **direct URL** can be downloaded and installed without winget — untick *prefer winget*, or run on a machine where winget is missing. Corn Downloader locates winget at launch, including when the per-user alias is missing (elevated launches, other accounts). Direct installs are silent (`/S /passive /norestart`, or a per-app override) and request UAC once each, one at a time.
 
 ### 🔍 Installed App Detection
 On startup the catalog is matched against `winget export` — a single JSON parse, no per-app queries.
@@ -35,7 +35,7 @@ On startup the catalog is matched against `winget export` — a single JSON pars
 A background `winget upgrade` scan surfaces an **⬆ Update N Apps** button when catalog apps have updates. Truncated IDs in winget's table output are matched by unique prefix so long package names aren't missed.
 
 ### 🔁 Resumable, Verified Downloads
-Direct downloads write to a `.part` file and resume with an HTTP `Range` request if interrupted. A stalled connection (no bytes for 60 s) fails fast instead of hanging. Entries with a pinned `Sha256` are verified before the installer runs.
+Direct downloads write to a `.part` file and resume with an HTTP `Range` request if interrupted. The server's ETag / Last-Modified is sent back as `If-Range`, so a "latest" link that has moved to a newer build restarts cleanly instead of producing a corrupt file. A link that returns a web page instead of an installer is rejected. A stalled connection (no bytes for 60 s) fails fast instead of hanging. Entries with a pinned `Sha256` are verified before the installer runs.
 
 ### ⚡ Parallel Downloads, Serialised Installs
 Up to **3 downloads** run at once. winget calls and installer launches are serialised (winget holds an install lock; MSI packages share the Windows Installer mutex), so you get throughput without "another install is in progress" failures or three UAC prompts at once.
@@ -62,7 +62,7 @@ On launch the app checks [GitHub Releases](https://github.com/Corn-Systems/CornD
 A second launch focuses the running window instead of racing it for `settings.json` and winget.
 
 ### 💾 Persistent Settings
-Window size/state, download folder, winget preference and scope are saved to `%AppData%\CornSystems\CornDownloader\settings.json`. Settings from the previous `CornStudios` folder are migrated automatically on first run.
+Window size/state, download folder, winget preference and scope are saved to `%AppData%\CornSystems\CornDownloader\settings.json`. Settings from pre-1.3.0 installs are migrated automatically on first run.
 
 ---
 
@@ -101,16 +101,16 @@ exit $p.ExitCode
 
 ## App Catalog
 
-**127 apps** across 7 categories:
+**120 apps** across 7 categories:
 
 | Category | Apps |
 |---|---|
 | 🌐 Browsers | Firefox, Chrome, Brave, Chromium, Opera GX, Tor Browser, Waterfox, LibreWolf, Min, Zen |
-| 💻 Dev Tools | VS Code, Visual Studio 2022, Git, Node.js, Python, Windows Terminal, GitHub Desktop, Postman, Docker, PowerShell 7, JetBrains Toolbox, Neovim, WSL, Insomnia, FileZilla, HeidiSQL, Wireshark, Blockbench, PyPy, Rust, Go, Android Studio, and more |
-| 🎬 Media & Entertainment | VLC, Spotify, OBS, Audacity, HandBrake, MPC-HC, iTunes, Plex, Stremio, foobar2000, ImageGlass, FreeTube, GIMP, DaVinci Resolve, Streamlink Twitch GUI, Blender, and more |
+| 💻 Dev Tools | VS Code, Visual Studio 2022, Git, Node.js, Python, Windows Terminal, GitHub Desktop, Postman, Docker, PowerShell 7, JetBrains Toolbox, Neovim, WSL, Insomnia, HeidiSQL, Wireshark, Blockbench, PyPy, Rust, Go, Android Studio, and more |
+| 🎬 Media & Entertainment | VLC, Spotify, OBS, Audacity, HandBrake, MPC-HC, iTunes, Plex, Stremio, foobar2000, ImageGlass, FreeTube, GIMP, Streamlink Twitch GUI, Blender, and more |
 | 📋 Productivity | Notion, Obsidian, Slack, Zoom, LibreOffice, Notepad++, ShareX, Bitwarden, Thunderbird, Stretchly, Greenshot, WhatsApp Desktop, Ferdium, Claude Desktop, and more |
-| 🎮 Gaming | Steam, Epic Games, GOG Galaxy, EA App, Ubisoft Connect, Discord, MSI Afterburner, Playnite, Minecraft, Prism Launcher, Heroic, Xbox App, Sunshine, Parsec, Overwolf, Medal, Itch.io, Battle.net, Rockstar Games Launcher, Vortex, Mod Organizer 2, CapFrameX, and more |
-| 🔧 Utilities & System Tools | 7-Zip, NanaZip, Everything Search, CPU-Z, HWiNFO, HWMonitor, CrystalDiskInfo, WinDirStat, Autoruns, Malwarebytes, PowerToys, GPU-Z, Revo Uninstaller, OpenVPN, ProtonVPN, WireGuard, Microsoft PC Manager, BleachBit, O&O ShutUp10++, Bulk Rename Utility, System Informer, Ventoy, Rufus, EqualizerAPO, and more |
+| 🎮 Gaming | Steam, Epic Games, GOG Galaxy, EA App, Ubisoft Connect, Discord, MSI Afterburner, Playnite, Minecraft, Prism Launcher, Heroic, Xbox App, Sunshine, Parsec, Medal, Itch.io, Battle.net, Rockstar Games Launcher, Vortex, Mod Organizer 2, CapFrameX, and more |
+| 🔧 Utilities & System Tools | 7-Zip, NanaZip, Everything Search, CPU-Z, HWiNFO, HWMonitor, CrystalDiskInfo, WinDirStat, Autoruns, Malwarebytes, PowerToys, GPU-Z, Revo Uninstaller, OpenVPN, ProtonVPN, WireGuard, Microsoft PC Manager, BleachBit, O&O ShutUp10++, Bulk Rename Utility, System Informer, Ventoy, Rufus, and more |
 | 🎨 Customization | Rainmeter, Lively Wallpaper, TranslucentTB, StartAllBack, EarTrumpet, Windhawk, YASB, ModernFlyouts, Komorebi, GlazeWM, ExplorerPatcher, FancyZones (PowerToys) |
 
 ---
