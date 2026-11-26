@@ -31,6 +31,7 @@ namespace CornDownloader
             AutoScaleMode   = AutoScaleMode.None;   // we scale explicitly via Dpi.S / Theme.Font
 
             try { this.Icon = AppIconBuilder.Get(); } catch (Exception ex) { SessionLog.Write("ICON", ex); }
+            DarkTitleBar.Apply(this, Theme.SURFACE, Theme.TEXT_PRI, Theme.BORDER);
 
             Size = new Size(Dpi.S(560), Dpi.S(540));
             Build();
@@ -83,10 +84,12 @@ namespace CornDownloader
                 Location  = new Point(Dpi.S(20), Dpi.S(42))
             });
 
-            var scroll = new Panel { AutoScroll = true, BackColor = Theme.BG, Dock = DockStyle.Fill };
+            var scroll = new Panel { AutoScroll = true, BackColor = Theme.BG };
+            var scrollHost = new CornScrollHost(scroll) { Dock = DockStyle.Fill };
             // Rows are positioned absolutely, so Padding never applied to them; use an explicit inset.
             int inset = Dpi.S(14);
-            int rowW  = ClientSize.Width - inset * 2 - SystemInformation.VerticalScrollBarWidth;
+            // The native bar is clipped away by CornScrollHost; leave room for the thin overlay one.
+            int rowW  = ClientSize.Width - inset * 2 - scrollHost.Bar.BarWidth;
 
             int y = Dpi.S(10);
             void Section(string title, Color color, IEnumerable<InstallResult> items, Func<InstallResult, string> status, bool collectFailed)
@@ -172,7 +175,7 @@ namespace CornDownloader
             }
             footer.Resize += (s, e) => PlaceButtons();
 
-            Controls.AddRange(new Control[] { scroll, header, footer });
+            Controls.AddRange(new Control[] { scrollHost, header, footer });
             ResumeLayout(true);
             PlaceButtons();
         }

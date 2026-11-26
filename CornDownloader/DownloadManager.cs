@@ -63,9 +63,28 @@ namespace CornDownloader
             _http.DefaultRequestHeaders.UserAgent.ParseAdd(AppInfo.UserAgent);
         }
 
-        public DownloadManager()
+        // True once winget discovery has run (sync in the constructor, or DetectWingetAsync).
+        public bool WingetDetected { get; private set; }
+
+        public DownloadManager() : this(detectWinget: true) { }
+
+        // The GUI passes false and calls DetectWingetAsync() so the window appears straight
+        // away — Resolve() runs `winget --version` for up to three candidates (20 s timeout
+        // each), which used to block the UI thread before the form was even shown.
+        public DownloadManager(bool detectWinget)
         {
+            if (!detectWinget) return;
             WingetAvailable = WingetRunner.Resolve();
+            WingetDetected  = true;
+        }
+
+        public async Task<bool> DetectWingetAsync()
+        {
+            if (WingetDetected) return WingetAvailable;
+            bool ok = await Task.Run(() => WingetRunner.Resolve());
+            WingetAvailable = ok;
+            WingetDetected  = true;
+            return ok;
         }
 
         private string ScopeArg => WingetScope is "user" or "machine" ? $" --scope {WingetScope}" : "";
@@ -192,6 +211,32 @@ namespace CornDownloader
                 Timeout.InfiniteTimeSpan, onProgress, ct);
 
             return Finish(result, r, $"{app.Name} upgraded successfully.");
+        }
+
+        public async Task<InstallResult> UninstallAsync(AppEntry app, Action<string> onProgress, CancellationToken ct = default)
+        {
+            var result = new InstallResult { App = app, Status = InstallStatus.Installing };
+            if (!WingetAvailable || string.IsNullOrEmpty(app.WingetId))
+            {
+                result.Status  = InstallStatus.Failed;
+                result.Message = "Uninstall needs winget and a winget id.";
+                return result;
+            }
+            onProgress?.Invoke($"Uninstalling {app.Name}...");
+
+            // --accept-package-agreements is install-only; winget rejects it on uninstall.
+            var r = await WingetRunner.RunAsync(
+                $"uninstall --id {app.WingetId} --exact --silent --accept-source-agreements{ScopeArg}",
+                Timeout.InfiniteTimeSpan, onProgress, ct);
+
+            if (!r.Cancelled && r.ExitCode == ExitCodes.WingetNoPackageFound)
+            {
+                // Removed outside the app since the last scan — the end state is what was asked for.
+                result.Status  = InstallStatus.Success;
+                result.Message = $"{app.Name} was already uninstalled.";
+                return result;
+            }
+            return Finish(result, r, $"{app.Name} uninstalled.");
         }
 
         private async Task<InstallResult> InstallViaWinget(AppEntry app, InstallResult result, Action<string> onProgress, CancellationToken ct)

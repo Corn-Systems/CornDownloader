@@ -49,6 +49,18 @@ Right-click an installed tile → **Force Reinstall / Repair** re-queues it with
 ### 🖥 Per-Monitor DPI
 The whole UI — layout, fonts, tiles, the summary dialog, the taskbar badge — re-scales when the window moves between monitors with different scaling (100% laptop ↔ 150% external, etc.), and opens at the right size on a secondary monitor. Window size is remembered in DPI-independent units.
 
+### 🎯 Presets
+One-click selections — 🎮 Gaming PC, 💻 Dev Machine, 🎓 Student, 🔐 Security Lab — on the strip above the grid. **＋ SAVE** turns the current selection into your own preset button. Presets are plain `.corn` packs in `%AppData%\CornSystems\CornDownloader\presets`, so they work with Import and `--pack` too.
+
+### 🧹 Uninstall
+Right-click an installed tile → **Uninstall...** (winget, silent, with a confirmation).
+
+### 🔎 Show Filters
+**ALL · INSTALLED · UPDATES · NOT INSTALLED · SELECTED** chips with live counts, combined with the category sidebar and search.
+
+### 🌑 Dark Window Chrome
+Dark title bar (Windows 10 1809+, palette-coloured on Windows 11) and thin themed scrollbars throughout.
+
 ### ⌨ Keyboard
 **Ctrl+F** search · **Esc** clear search · **Ctrl+A** select everything in view · **Ctrl+Enter** install.
 
@@ -160,6 +172,7 @@ CornDownloader/
 ├─ AppTile.cs          catalog tile control + category divider (SectionHeader)
 ├─ SummaryForm.cs      post-run summary dialog
 ├─ AppCatalog.cs       the app list (edit this to add apps)
+├─ Presets.cs          built-in presets + loading/saving user presets (.corn)
 ├─ DownloadManager.cs  install / upgrade / download logic
 ├─ WingetRunner.cs     winget discovery, single process runner, exit-code table
 ├─ UpdateChecker.cs    GitHub Releases version check
@@ -170,6 +183,8 @@ CornDownloader/
 ├─ Theme.cs            Corn Systems palette + DPI-correct (pixel-sized, cached) fonts
 ├─ Dpi.cs              shared PerMonitorV2 helper (identical across Corn Systems repos)
 ├─ DpiLayout.cs        re-runs layout steps when the window changes monitor DPI
+├─ DarkTitleBar.cs     shared: dark / palette-coloured title bar via DWM
+├─ CornScrollBar.cs    shared: themed overlay scrollbar (CornScrollHost + CornScrollBar)
 ├─ AppIcons.cs         window icon (embedded .ico, drawn fallback) + taskbar overlay badge
 ├─ Assets/CornDownloader.ico
 ├─ App.manifest

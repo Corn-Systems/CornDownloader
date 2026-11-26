@@ -15,6 +15,7 @@ namespace CornDownloader
         public static readonly Color SURFACE2    = Color.FromArgb( 26,  24,  53);
         public static readonly Color CARD        = Color.FromArgb( 16,  15,  34);
         public static readonly Color CARD_HOVER  = Color.FromArgb( 19,  18,  45);
+        public static readonly Color ACCENT_GLOW = Color.FromArgb( 40,  30,   8);   // warm tint behind active chips
         public static readonly Color DRAWER      = Color.FromArgb( 12,  11,  28);
 
         public static readonly Color ACCENT      = Color.FromArgb(245, 200,  66);

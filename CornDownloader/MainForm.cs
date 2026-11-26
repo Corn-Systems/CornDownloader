@@ -59,6 +59,16 @@ namespace CornDownloader
         private Panel           _logPanel;
         private Label           _scanStatusLabel;
         private Label           _emptyLabel;
+        private CornScrollHost  _sidebarHost;     // themed scrollbars (CornScrollBar)
+        private CornScrollHost  _gridHost;
+        private Panel           _filterBar;       // presets row + show-filter chips row
+        private FlowLayoutPanel _presetRow;
+        private FlowLayoutPanel _chipRow;
+        private readonly Dictionary<string, Button> _chipBtns = new();
+        private string _statusFilter = "All";     // All | Installed | Updates | NotInstalled | Selected
+        private bool   _installedScanDone;
+        private bool   _upgradeScanDone;
+        private Task   _wingetDetectTask;
         // Every DPI-dependent size/position/font in the chrome registers here so a monitor
         // change can re-run it (see DpiLayout).
         private readonly DpiLayout _dpi = new();
@@ -72,7 +82,8 @@ namespace CornDownloader
         {
             _cli      = cli;
             _settings = SettingsManager.Load();
-            _dm       = new DownloadManager { WingetScope = cli?.Scope ?? _settings.WingetScope ?? "auto" };
+            // winget discovery runs in RunStartupAsync so the window shows immediately.
+            _dm       = new DownloadManager(detectWinget: false) { WingetScope = cli?.Scope ?? _settings.WingetScope ?? "auto" };
             _categories = new[] { "All" }
                 .Concat(AppCatalog.All.Select(a => a.Category).Distinct().OrderBy(c => c))
                 .ToArray();
@@ -201,6 +212,8 @@ namespace CornDownloader
             try
             {
                 if (_settings.CheckForUpdates) _ = CheckForUpdatesAsync(ct);
+                _wingetDetectTask = DetectWingetAsync();   // assigned before the first await: Install waits on it
+                await _wingetDetectTask;
                 await RefreshWingetSourcesAsync(ct);
                 await ScanInstalledAsync(ct);
                 _upgradeScanTask = ScanUpgradesAsync(ct);
@@ -209,6 +222,28 @@ namespace CornDownloader
             catch (Exception ex) { SessionLog.Write("STARTUP", ex); }
             _initialized = true;
             Ui(UpdateSelectionCount);   // now safe to push the real badge
+        }
+
+        private async Task DetectWingetAsync()
+        {
+            try { await _dm.DetectWingetAsync(); }
+            catch (Exception ex) { SessionLog.Write("WINGET-DETECT", ex); }
+            Ui(OnWingetDetected);
+        }
+
+        private void OnWingetDetected()
+        {
+            UpdateWingetBadge();
+            _preferWingetChk.Enabled = _dm.WingetAvailable;
+            _preferWingetChk.Checked = _settings.PreferWinget && _dm.WingetAvailable && !(_cli?.NoWinget ?? false);
+            if (!_dm.WingetAvailable)
+            {
+                SetScanStatus("", Theme.MUTED);
+                _installedScanDone = _upgradeScanDone = true;   // nothing to wait for
+                RefreshFilterChips();
+            }
+            LayoutPanels();
+            Log(_dm.WingetAvailable ? "[WINGET] detected" : "[WINGET] not found — direct URLs only");
         }
 
         private async Task CheckForUpdatesAsync(CancellationToken ct)
@@ -248,8 +283,7 @@ namespace CornDownloader
                 folder = AppPaths.DefaultDownloadFolder;
             if (_folderBox != null) _folderBox.Text = folder;
 
-            if (_preferWingetChk != null)
-                _preferWingetChk.Checked = _settings.PreferWinget && _dm.WingetAvailable && !(_cli?.NoWinget ?? false);
+            // The prefer-winget checkbox is set in OnWingetDetected once discovery finishes.
         }
 
         private void SaveSettings()
@@ -271,6 +305,12 @@ namespace CornDownloader
         }
 
         // ── Winget scans ──────────────────────────────────────────────────────
+
+        private void UpdateInstalledSummary()
+        {
+            int ic = _installedCache.Values.Count(v => v);
+            SetScanStatus($"✔ {ic}/{AppCatalog.All.Count} apps installed", Theme.SUCCESS);
+        }
 
         private void SetScanStatus(string text, Color color) =>
             Ui(() => { if (_scanStatusLabel != null) { _scanStatusLabel.Text = text; _scanStatusLabel.ForeColor = color; } });
@@ -295,12 +335,13 @@ namespace CornDownloader
                 foreach (var kv in _tiles)
                     if (_installedCache.TryGetValue(kv.Key, out bool inst)) kv.Value.SetInstalled(inst);
 
-                int ic = _installedCache.Values.Count(v => v);
+                _installedScanDone = true;
                 if (installedIds.Count == 0)
                     SetScanStatus("⚠ installed scan returned nothing (winget slow?) — see log", Theme.WARNING);
                 else
-                    SetScanStatus($"✔ {ic}/{AppCatalog.All.Count} apps installed", Theme.SUCCESS);
+                    UpdateInstalledSummary();
                 UpdateSelectionCount();
+                if (_statusFilter is "Installed" or "NotInstalled") PopulateApps(_activeCategory);
             });
         }
 
@@ -315,7 +356,10 @@ namespace CornDownloader
             {
                 foreach (var kv in _tiles)
                     if (_upgradeCache.TryGetValue(kv.Key, out bool u)) kv.Value.SetHasUpdate(u);
+                _upgradeScanDone = true;
                 RefreshUpgradeButton();
+                RefreshFilterChips();
+                if (_statusFilter == "Updates") PopulateApps(_activeCategory);
             });
         }
 
@@ -327,6 +371,7 @@ namespace CornDownloader
             _upgradeBtn.Enabled = count > 0 && !_isInstalling;
             _upgradeBtn.Text    = count > 0 ? $"⬆  Update {count} App{(count == 1 ? "" : "s")}" : "";
             LayoutPanels();
+            RefreshFilterChips();
         }
 
         private async Task WaitForBackgroundScanAsync()
@@ -477,41 +522,118 @@ namespace CornDownloader
                     return;
                 }
 
-                foreach (var tile in _tiles.Values) tile.IsChecked = false;
-
-                int matched = 0, alreadyInstalled = 0;
-                foreach (var packed in pack.Apps)
-                {
-                    var entry = AppCatalog.Find(packed.Id, packed.Name);
-                    if (entry == null || !_tiles.TryGetValue(entry, out var tile)) continue;
-                    if (_installedCache.TryGetValue(entry, out bool inst) && inst) { alreadyInstalled++; continue; }
-
-                    tile.IsChecked = true;
-                    // PinnedVersion is session-scoped: it lives on the catalog entry until restart.
-                    // A pack without a pin means "latest", so clear any pin left from earlier.
-                    entry.PinnedVersion = string.IsNullOrEmpty(packed.PinnedVersion) ? null : packed.PinnedVersion;
-                    tile.SetPinnedVersion(entry.PinnedVersion);
-                    if (tile.IsChecked) matched++;
-                }
-
-                UpdateSelectionCount();
-                _statusLabel.Text = $"✔ Imported {matched}/{pack.Apps.Count} apps from pack" +
-                                    (alreadyInstalled > 0 ? $" ({alreadyInstalled} already installed)." : ".");
-                Log($"[IMPORT] {matched}/{pack.Apps.Count} apps ← {dlg.FileName}");
-
-                if (matched + alreadyInstalled < pack.Apps.Count)
-                {
-                    int missing = pack.Apps.Count - matched - alreadyInstalled;
-                    MessageBox.Show(
-                        $"{missing} app{(missing == 1 ? "" : "s")} in the pack weren't found in the catalog (may have been removed or renamed).",
-                        "Partial import", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
+                ApplyPack(pack, Path.GetFileName(dlg.FileName), showMissing: true);
             }
             catch (Exception ex)
             {
                 SessionLog.Write("IMPORT", ex);
                 MessageBox.Show($"Import failed:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        // Shared by Import and the preset strip: replace the selection with the pack's apps.
+        private void ApplyPack(SelectionPack pack, string label, bool showMissing)
+        {
+            foreach (var tile in _tiles.Values) tile.IsChecked = false;
+
+            int matched = 0, alreadyInstalled = 0;
+            var missingNames = new List<string>();
+            foreach (var packed in pack.Apps)
+            {
+                var entry = AppCatalog.Find(packed.Id, packed.Name);
+                if (entry == null || !_tiles.TryGetValue(entry, out var tile)) { missingNames.Add(packed.Name ?? packed.Id); continue; }
+                if (_installedCache.TryGetValue(entry, out bool inst) && inst) { alreadyInstalled++; continue; }
+
+                tile.IsChecked = true;
+                // PinnedVersion is session-scoped: it lives on the catalog entry until restart.
+                // A pack without a pin means "latest", so clear any pin left from earlier.
+                entry.PinnedVersion = string.IsNullOrEmpty(packed.PinnedVersion) ? null : packed.PinnedVersion;
+                tile.SetPinnedVersion(entry.PinnedVersion);
+                if (tile.IsChecked) matched++;
+            }
+
+            UpdateSelectionCount();
+            _statusLabel.Text = $"✔ {label}: {matched} app{(matched == 1 ? "" : "s")} selected" +
+                                (alreadyInstalled > 0 ? $" ({alreadyInstalled} already installed)." : ".");
+            Log($"[PACK] {label}: {matched}/{pack.Apps.Count} selected, {alreadyInstalled} installed, {missingNames.Count} missing");
+            if (missingNames.Count > 0) Log($"[PACK] not in catalog: {string.Join(", ", missingNames)}");
+
+            // Show exactly what was picked.
+            if (matched > 0) { SelectCategory("All"); SetStatusFilter("Selected"); }
+
+            if (showMissing && missingNames.Count > 0)
+                MessageBox.Show(this,
+                    $"{missingNames.Count} app{(missingNames.Count == 1 ? "" : "s")} in the pack weren't found in the catalog (may have been removed or renamed).",
+                    "Partial import", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        // ── Uninstall ─────────────────────────────────────────────────────────
+
+        private async void OnUninstallRequested(AppEntry app, AppTile tile)
+        {
+            if (_isInstalling) { _statusLabel.Text = "⏳ Wait for the current batch to finish before uninstalling."; return; }
+            if (!_dm.WingetAvailable || string.IsNullOrEmpty(app.WingetId)) return;
+
+            var answer = MessageBox.Show(this,
+                $"Uninstall {app.Name}?\n\nwinget runs the app's own uninstaller silently. Settings or data the app keeps may be removed too.",
+                "Uninstall", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+            if (answer != DialogResult.Yes) return;
+
+            _isInstalling = true;
+            _cts = new CancellationTokenSource();
+            var token = _cts.Token;
+            SetInstallingUi(true, "⏳ Uninstalling...", 1);
+            tile.ShowNote("⏳ Uninstalling...", Theme.WARNING);
+            Log($"[UNINSTALL] {app.Name} ({app.WingetId}) — {DateTime.Now:HH:mm:ss}");
+
+            InstallResult result;
+            try
+            {
+                result = await _dm.UninstallAsync(app,
+                    msg => Ui(() =>
+                    {
+                        _statusLabel.Text = $"{app.Name}: {msg}";
+                        Log($"[{app.Name}] {msg}");
+                        tile.AppendLog(msg);
+                    }),
+                    token);
+            }
+            catch (Exception ex)
+            {
+                SessionLog.Write("UNINSTALL", ex);
+                result = new InstallResult { App = app, Status = InstallStatus.Failed, Message = ex.Message };
+            }
+            finally
+            {
+                SetInstallingUi(false, "⬇  INSTALL", 0);
+            }
+            if (_closing || IsDisposed) return;
+
+            _overallProgress.Value = _overallProgress.Maximum;
+            switch (result.Status)
+            {
+                case InstallStatus.Success:
+                    _installedCache[app] = false;
+                    _upgradeCache[app]   = false;
+                    tile.SetInstalled(false);
+                    tile.ShowNote(result.RebootRequired ? "⟳ Uninstalled (restart)" : "○ Uninstalled", Theme.MUTED);
+                    if (_installedScanDone) UpdateInstalledSummary();
+                    RefreshUpgradeButton();
+                    _statusLabel.Text = $"✔ {result.Message}" + (result.RebootRequired ? " Restart Windows to finish." : "");
+                    if (_statusFilter is "Installed" or "Updates") PopulateApps(_activeCategory);
+                    break;
+                case InstallStatus.Skipped:
+                    tile.SetInstalled(true);
+                    _statusLabel.Text = $"⊘ Uninstall of {app.Name} cancelled.";
+                    break;
+                default:
+                    tile.SetInstalled(true);
+                    tile.ShowNote("✘ Uninstall failed", Theme.DANGER);
+                    _statusLabel.Text = $"✘ Couldn't uninstall {app.Name}: {result.Message}";
+                    break;
+            }
+            Log($"[UNINSTALL] {app.Name}: {result.Status} — {result.Message}");
+            UpdateSelectionCount();
         }
 
         // ── UI construction ───────────────────────────────────────────────────
@@ -542,7 +664,8 @@ namespace CornDownloader
             BuildMainArea();
             BuildBottomBar();
 
-            this.Controls.AddRange(new Control[] { _topBar, _sidebar, _mainArea, _bottomBar });
+            this.Controls.AddRange(new Control[] { _topBar, _sidebarHost, _mainArea, _bottomBar });
+            DarkTitleBar.Apply(this, Theme.SURFACE, Theme.TEXT_PRI, Theme.BORDER);
             this.Resize += (s, e) => LayoutPanels();
             LayoutPanels();
 
@@ -559,8 +682,13 @@ namespace CornDownloader
             _sidebar.AutoScrollPosition = Point.Empty;
             _dpi.Reapply();
             foreach (var tile in _tiles.Values) tile.ApplyDpi();
+            foreach (var row in new Control[] { _presetRow, _chipRow })
+                foreach (Control c in row.Controls) ApplyChipMetrics(c);
+            LayoutFilterBar();
             PopulateApps(_activeCategory);
             LayoutPanels();
+            _sidebarHost.LayoutContent();
+            _gridHost.LayoutContent();
             TaskbarBadge.SetCount(IsHandleCreated ? Handle : IntPtr.Zero, _initialized ? _tiles.Values.Count(t => t.IsChecked) : 0);
             try { this.Icon = AppIconBuilder.Get(); } catch (Exception ex) { SessionLog.Write("ICON", ex); }
         }
@@ -576,7 +704,7 @@ namespace CornDownloader
             int contentH = h - topH - botH - logH;
 
             _topBar.SetBounds(0, 0, w, topH);
-            _sidebar.SetBounds(0, topH, sideW, contentH);
+            _sidebarHost.SetBounds(0, topH, sideW, contentH);
             _mainArea.SetBounds(sideW, topH, w - sideW, contentH);
 
             if (_logPanel != null)
@@ -709,7 +837,9 @@ namespace CornDownloader
 
         private void UpdateWingetBadge()
         {
-            if (_dm.WingetAvailable)
+            if (!_dm.WingetDetected)
+            { _wingetBadge.Text = "⏳  detecting winget..."; _wingetBadge.ForeColor = Theme.TEXT_SEC; }
+            else if (_dm.WingetAvailable)
             { _wingetBadge.Text = "✦  winget detected"; _wingetBadge.ForeColor = Theme.SUCCESS; }
             else
             { _wingetBadge.Text = "⚠  winget not found — direct URLs only"; _wingetBadge.ForeColor = Theme.METEOR; }
@@ -783,7 +913,7 @@ namespace CornDownloader
 
             _scanStatusLabel = new Label
             {
-                Text      = _dm.WingetAvailable ? "🔍 scanning..." : "",
+                Text      = "⏳ detecting winget...",
                 ForeColor = Theme.MUTED,
                 AutoSize  = false,
                 BackColor = Color.Transparent,
@@ -813,6 +943,7 @@ namespace CornDownloader
             });
 
             _sidebar.Controls.AddRange(new Control[] { selAll, deselAll, recBtn, exportBtn, importBtn, _scanStatusLabel });
+            _sidebarHost = new CornScrollHost(_sidebar);
         }
 
         // width/height are logical (96-DPI) pixels; scaled now and on every DPI change.
@@ -900,13 +1031,19 @@ namespace CornDownloader
 
             btn.Click += (s, e) =>
             {
-                _activeCategory = category;
-                RefreshSidebarButtons();
+                SelectCategory(category);
                 PopulateApps(category);
             };
 
             _sidebarBtns[category] = btn;
             return btn;
+        }
+
+        // Highlight only — callers repopulate (avoids a double rebuild when a filter changes too).
+        private void SelectCategory(string category)
+        {
+            _activeCategory = category;
+            RefreshSidebarButtons();
         }
 
         private void UpdateSidebarCounts()
@@ -955,6 +1092,241 @@ namespace CornDownloader
         }
 
         // ── App grid ──────────────────────────────────────────────────────────
+        // ── Presets + show-filter strip (top of the main area) ───────────────
+
+        private void BuildFilterBar()
+        {
+            _filterBar = new Panel { BackColor = Theme.SURFACE, Dock = DockStyle.Top };
+            _filterBar.Paint += (s, e) =>
+            {
+                using var pen = new Pen(Theme.BORDER);
+                e.Graphics.DrawLine(pen, 0, _filterBar.Height - 1, _filterBar.Width, _filterBar.Height - 1);
+            };
+
+            FlowLayoutPanel MakeRow() => new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents  = false,
+                BackColor     = Color.Transparent,
+                Dock          = DockStyle.Top
+            };
+            _chipRow   = MakeRow();
+            _presetRow = MakeRow();
+            _presetRow.WrapContents = true;   // user presets wrap onto extra lines instead of being clipped
+            // Docked Top in reverse z-order: the preset row (added last) ends up on top.
+            _filterBar.Controls.Add(_chipRow);
+            _filterBar.Controls.Add(_presetRow);
+            _dpi.Add(() =>
+            {
+                _presetRow.Padding = new Padding(Dpi.S(12), Dpi.S(6), 0, Dpi.S(2));
+                _chipRow.Padding   = new Padding(Dpi.S(12), Dpi.S(2), 0, 0);
+                LayoutFilterBar();
+            });
+            _filterBar.Resize += (s, e) => LayoutFilterBar();
+
+            RebuildPresetRow();
+
+            _chipRow.Controls.Add(MakeRowLabel("// SHOW"));
+            foreach (var key in new[] { "All", "Installed", "Updates", "NotInstalled", "Selected" })
+            {
+                var chip = MakeChip("", Theme.TEXT_SEC);
+                chip.Tag    = key;
+                chip.Click += (s, e) => SetStatusFilter(key);
+                _chipBtns[key] = chip;
+                _chipRow.Controls.Add(chip);
+            }
+            RefreshFilterChips();
+        }
+
+        private void RebuildPresetRow()
+        {
+            _presetRow.SuspendLayout();
+            foreach (Control c in _presetRow.Controls.Cast<Control>().ToList()) c.Dispose();
+            _presetRow.Controls.Clear();
+
+            _presetRow.Controls.Add(MakeRowLabel("// PRESETS"));
+            foreach (var preset in Presets.BuiltIn.Concat(Presets.LoadUser()))
+            {
+                var btn = MakeChip($"{preset.Emoji} {preset.Name.ToUpperInvariant()}", preset.IsUser ? Theme.TEXT_PRI : Theme.ACCENT);
+                var names = preset.Pack.Apps
+                    .Select(p => AppCatalog.Find(p.Id, p.Name)?.Name ?? p.Name ?? p.Id)
+                    .Where(n => !string.IsNullOrEmpty(n)).ToList();
+                _sharedTileTip.SetToolTip(btn, $"{preset.Description}\n\n{string.Join(", ", names)}");
+                btn.Click += (s, e) => ApplyPack(preset.Pack, $"{preset.Name} preset", showMissing: false);
+                if (preset.IsUser)
+                {
+                    var cms = new ContextMenuStrip();
+                    cms.Items.Add("Open presets folder", null, (s, e) => OpenPresetsFolder());
+                    btn.ContextMenuStrip = cms;
+                    btn.Disposed += (s, e) => cms.Dispose();
+                }
+                _presetRow.Controls.Add(btn);
+            }
+
+            var saveBtn = MakeChip("＋ SAVE", Theme.TEXT_SEC);
+            _sharedTileTip.SetToolTip(saveBtn, "Save the current selection as a preset button.\nPresets are .corn packs in your presets folder — share them like any export.");
+            saveBtn.Click += (s, e) => SaveSelectionAsPreset();
+            _presetRow.Controls.Add(saveBtn);
+            _presetRow.ResumeLayout(true);
+            LayoutFilterBar();
+
+            // Catch typos in the built-in presets early (logged, never shown to users).
+            foreach (var preset in Presets.BuiltIn)
+                foreach (var p in preset.Pack.Apps)
+                    if (AppCatalog.Find(p.Id, p.Name) == null)
+                        Log($"[PRESET] '{preset.Name}' references unknown app id '{p.Id}'");
+        }
+
+        private bool _layingFilterBar;
+
+        // Preset row height follows how many lines its chips wrap onto at the current width.
+        private void LayoutFilterBar()
+        {
+            if (_filterBar == null || _presetRow == null || _chipRow == null || _layingFilterBar) return;
+            _layingFilterBar = true;
+            try
+            {
+                int width   = Math.Max(Dpi.S(200), _filterBar.ClientSize.Width);
+                int presetH = Math.Max(Dpi.S(36), _presetRow.GetPreferredSize(new Size(width, 0)).Height);
+                _presetRow.Height = presetH;
+                _chipRow.Height   = Dpi.S(34);
+                _filterBar.Height = presetH + _chipRow.Height + Dpi.S(2);
+            }
+            finally { _layingFilterBar = false; }
+        }
+
+        private Label MakeRowLabel(string text)
+        {
+            var lbl = new Label { Text = text, ForeColor = Theme.MUTED, AutoSize = true, BackColor = Color.Transparent };
+            ApplyChipMetrics(lbl);
+            return lbl;
+        }
+
+        private Button MakeChip(string text, Color fg)
+        {
+            var btn = new Button
+            {
+                Text         = text,
+                AutoSize     = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                FlatStyle    = FlatStyle.Flat,
+                BackColor    = Theme.SURFACE2,
+                ForeColor    = fg,
+                Cursor       = Cursors.Hand,
+                UseMnemonic  = false,
+                TabStop      = false
+            };
+            btn.FlatAppearance.BorderColor        = Theme.BORDER2;
+            btn.FlatAppearance.BorderSize         = 1;
+            btn.FlatAppearance.MouseOverBackColor = Theme.CARD_HOVER;
+            ApplyChipMetrics(btn);
+            return btn;
+        }
+
+        // Chip buttons are rebuilt when presets change, so they're re-scaled from
+        // RescaleForDpi instead of registering one DpiLayout step per (possibly disposed) button.
+        private static void ApplyChipMetrics(Control c)
+        {
+            if (c is Label)
+            {
+                c.Font   = Theme.Font(Theme.MonoFont, 6.5f, FontStyle.Bold);
+                c.Margin = new Padding(0, Dpi.S(7), Dpi.S(8), 0);
+                return;
+            }
+            c.Font        = Theme.Font(Theme.MonoFont, 7f, FontStyle.Bold);
+            c.Padding     = new Padding(Dpi.S(6), 0, Dpi.S(6), 0);
+            c.MinimumSize = new Size(0, Dpi.S(26));
+            c.Margin      = new Padding(0, 0, Dpi.S(6), 0);
+        }
+
+        private void SetStatusFilter(string key)
+        {
+            _statusFilter = key;
+            RefreshFilterChips();
+            PopulateApps(_activeCategory);
+        }
+
+        private void RefreshFilterChips()
+        {
+            if (_chipBtns.Count == 0) return;
+            int total     = AppCatalog.All.Count;
+            int installed = AppCatalog.All.Count(IsInstalled);
+            int updates   = AppCatalog.All.Count(HasUpdate);
+            int selected  = _tiles.Values.Count(t => t.IsChecked);
+            string Pending(bool done, int n) => done ? n.ToString() : "…";
+
+            var labels = new Dictionary<string, string>
+            {
+                ["All"]          = $"ALL {total}",
+                ["Installed"]    = $"✔ INSTALLED {Pending(_installedScanDone, installed)}",
+                ["Updates"]      = $"⬆ UPDATES {Pending(_upgradeScanDone, updates)}",
+                ["NotInstalled"] = $"○ NOT INSTALLED {Pending(_installedScanDone, total - installed)}",
+                ["Selected"]     = $"☑ SELECTED {selected}",
+            };
+            foreach (var kv in _chipBtns)
+            {
+                bool active = kv.Key == _statusFilter;
+                var  btn    = kv.Value;
+                if (btn.Text != labels[kv.Key]) btn.Text = labels[kv.Key];
+                btn.BackColor = active ? Theme.ACCENT_GLOW : Theme.SURFACE2;
+                btn.ForeColor = active ? Theme.ACCENT : kv.Key == "Updates" && updates > 0 ? Theme.METEOR : Theme.TEXT_SEC;
+                btn.FlatAppearance.BorderColor = active ? Theme.ACCENT : Theme.BORDER2;
+            }
+        }
+
+        private void SaveSelectionAsPreset()
+        {
+            var selected = _tiles.Where(kv => kv.Value.IsChecked).Select(kv => kv.Key).ToList();
+            if (selected.Count == 0)
+            {
+                _statusLabel.Text = "✘ Select some apps first, then save them as a preset.";
+                return;
+            }
+            try { Directory.CreateDirectory(AppPaths.PresetsDir); }
+            catch (Exception ex) { SessionLog.Write("PRESETS", ex); }
+
+            using var dlg = new SaveFileDialog
+            {
+                Title            = "Save selection as preset — the file name becomes the button label",
+                Filter           = "Corn Downloader pack (*.corn)|*.corn",
+                InitialDirectory = AppPaths.PresetsDir,
+                FileName         = "My Setup.corn",
+                OverwritePrompt  = true
+            };
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+            try
+            {
+                string name = Path.GetFileNameWithoutExtension(dlg.FileName);
+                var pack = new SelectionPack
+                {
+                    CreatedAt = DateTime.Now.ToString("O"),
+                    Apps      = selected.Select(a => new PackedApp { Id = a.Id, Name = a.Name, PinnedVersion = a.PinnedVersion }).ToList()
+                };
+                // Always lands in the presets folder (that's what the strip reads), whatever
+                // folder the dialog was browsed to.
+                string path = Presets.Save(name, pack);
+                RebuildPresetRow();
+                _statusLabel.Text = $"✔ Saved preset \"{name}\" ({selected.Count} apps).";
+                Log($"[PRESET] saved {selected.Count} app(s) → {path}");
+            }
+            catch (Exception ex)
+            {
+                SessionLog.Write("PRESET-SAVE", ex);
+                MessageBox.Show(this, $"Couldn't save the preset:\n{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void OpenPresetsFolder()
+        {
+            try
+            {
+                Directory.CreateDirectory(AppPaths.PresetsDir);
+                Process.Start(new ProcessStartInfo(AppPaths.PresetsDir) { UseShellExecute = true })?.Dispose();
+            }
+            catch (Exception ex) { SessionLog.Write("PRESETS", ex); }
+        }
+
         private void BuildMainArea()
         {
             _mainArea = new Panel { BackColor = Theme.BG };
@@ -962,11 +1334,14 @@ namespace CornDownloader
             {
                 AutoScroll   = true,
                 WrapContents = true,
-                BackColor    = Theme.BG,
-                Dock         = DockStyle.Fill
+                BackColor    = Theme.BG
             };
             _dpi.Add(() => _appGrid.Padding = new Padding(Dpi.S(12)));
-            _mainArea.Controls.Add(_appGrid);
+            _gridHost = new CornScrollHost(_appGrid) { Dock = DockStyle.Fill };
+            BuildFilterBar();
+            _mainArea.Controls.Add(_gridHost);
+            _mainArea.Controls.Add(_filterBar);
+            _gridHost.BringToFront();   // Fill must be laid out after the Top-docked filter bar
 
             // Shown instead of an empty grid when a search matches nothing.
             _emptyLabel = new Label
@@ -1003,10 +1378,27 @@ namespace CornDownloader
                                        (a.WingetId ?? "").Contains(search, StringComparison.OrdinalIgnoreCase) ||
                                        (a.Category ?? "").Contains(search, StringComparison.OrdinalIgnoreCase));
 
+            apps = _statusFilter switch
+            {
+                "Installed"    => apps.Where(IsInstalled),
+                "Updates"      => apps.Where(HasUpdate),
+                "NotInstalled" => apps.Where(a => !IsInstalled(a)),
+                "Selected"     => apps.Where(a => _tiles.TryGetValue(a, out var t) && t.IsChecked),
+                _              => apps
+            };
+
             var visible = apps.ToList();
             if (visible.Count == 0)
             {
-                _emptyLabel.Text    = search.Length > 0 ? $"// no apps match \"{search}\"" : "// nothing in this category";
+                _emptyLabel.Text = search.Length > 0 ? $"// no apps match \"{search}\""
+                    : _statusFilter switch
+                    {
+                        "Installed"    => _installedScanDone ? "// none of the catalog apps are installed" : "// still scanning installed apps...",
+                        "Updates"      => _upgradeScanDone   ? "// everything is up to date ✔"          : "// still checking for updates...",
+                        "NotInstalled" => "// every app here is already installed",
+                        "Selected"     => "// nothing selected — tick some apps or pick a preset",
+                        _              => "// nothing in this category"
+                    };
                 _emptyLabel.Visible = true;
                 _appGrid.Controls.Add(_emptyLabel);
             }
@@ -1023,6 +1415,8 @@ namespace CornDownloader
                     {
                         tile = new AppTile(app, _dm, _sharedTileTip) { IsChecked = false };
                         tile.CheckedChanged += (s, e) => UpdateSelectionCount();
+                        var entry = app;   // capture per tile
+                        tile.UninstallRequested += (s, e) => OnUninstallRequested(entry, (AppTile)s);
                         _tiles[app] = tile;
                     }
                     _appGrid.Controls.Add(tile);
@@ -1031,6 +1425,9 @@ namespace CornDownloader
 
             _appGrid.ResumeLayout(true);
         }
+
+        private bool IsInstalled(AppEntry a) => _installedCache.TryGetValue(a, out bool v) && v;
+        private bool HasUpdate(AppEntry a)   => _upgradeCache.TryGetValue(a, out bool v) && v;
 
         internal static string CategoryEmoji(string cat) => cat switch
         {
@@ -1313,10 +1710,16 @@ namespace CornDownloader
                 }
             }
 
-            bool preferWinget = _preferWingetChk.Checked;
             _isInstalling = true;   // claim the slot before the first await so a second click can't start another batch
             _installBtn.Enabled = false;
             if (_upgradeBtn != null) _upgradeBtn.Enabled = false;
+            if (_wingetDetectTask != null && !_wingetDetectTask.IsCompleted)
+            {
+                _statusLabel.Text = "⏳ Waiting for winget detection...";
+                try { await _wingetDetectTask; } catch (Exception ex) { SessionLog.Write("WINGET-DETECT", ex); }
+            }
+            // Read after detection: until then the checkbox is disabled and unticked.
+            bool preferWinget = _preferWingetChk.Checked;
             await WaitForBackgroundScanAsync();
             if (_closing || IsDisposed) return;
 
@@ -1396,6 +1799,8 @@ namespace CornDownloader
                     // Reflect the install straight away instead of waiting for the next launch's scan.
                     _installedCache[app] = true;
                     tile.SetInstalled(true);
+                    if (_installedScanDone) UpdateInstalledSummary();
+                    RefreshFilterChips();
                     if (_upgradeCache.TryGetValue(app, out bool had) && had)
                     {
                         _upgradeCache[app] = false;   // a fresh install is the latest version
@@ -1423,6 +1828,7 @@ namespace CornDownloader
             if (_selectionCountLabel != null)
                 _selectionCountLabel.Text = count == 0 ? "no apps selected" : $"{count} app{(count == 1 ? "" : "s")} selected";
             UpdateSidebarCounts();
+            RefreshFilterChips();
 
             // Badge only after startup so pre-checked defaults don't flash.
             if (_initialized && IsHandleCreated)

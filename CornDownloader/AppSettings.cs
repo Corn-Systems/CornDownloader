@@ -63,6 +63,10 @@ namespace CornDownloader
     {
         public string Version        { get; set; } = "1";
         public string CreatedAt      { get; set; }
+        // Optional (v1.4+): shown on the preset strip for packs saved as presets. Older
+        // builds ignore unknown properties, so packs stay compatible both ways.
+        public string Name           { get; set; }
+        public string Description    { get; set; }
         public List<PackedApp> Apps  { get; set; } = new();
     }
 

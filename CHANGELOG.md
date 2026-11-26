@@ -4,7 +4,7 @@ All notable changes to Corn Downloader from **1.3.0** onward. Format follows [Ke
 
 ## [1.4.0] - 2026-11-26
 
-Per-monitor DPI pass, a round of bug fixes, and 57 new catalog apps.
+Presets, uninstall, status filters, a darker window, a per-monitor DPI pass, a round of bug fixes and 57 new catalog apps.
 
 ### Fixed
 - **Per-monitor DPI:** moving the window to a monitor with different scaling only resized the four outer panels — every button, label, tile and font stayed at the old size. All chrome, tiles, section headers and the summary dialog now re-lay out on `DpiChanged`, and the window re-checks its DPI when it is first shown (opening on a secondary monitor) and when it regains focus.
@@ -28,6 +28,11 @@ Per-monitor DPI pass, a round of bug fixes, and 57 new catalog apps.
 - Long winget status lines ran underneath the Cancel/Clear buttons; the status text now ellipsises.
 
 ### Added
+- **Preset strip:** one-click selections for 🎮 Gaming PC, 💻 Dev Machine, 🎓 Student and 🔐 Security Lab. **＋ SAVE** stores the current selection as your own preset; presets are ordinary `.corn` packs in `%AppData%\CornSystems\CornDownloader\presets` (share them, edit them, or pass them to `--pack`). Hover a preset to see what it selects.
+- **Uninstall:** right-click an installed tile → **Uninstall...** runs `winget uninstall --exact --silent` after a confirmation, then flips the tile back to installable.
+- **Show filters:** ALL · ✔ INSTALLED · ⬆ UPDATES · ○ NOT INSTALLED · ☑ SELECTED chips with live counts, combined with the category and search. Importing a pack or picking a preset jumps to ☑ SELECTED so you can review it.
+- **Dark title bar** on every window (Windows 10 1809+), coloured to match the top bar on Windows 11.
+- **Themed scrollbars:** the app grid, sidebar and summary dialog use a thin Corn Systems scrollbar instead of the light-grey native one.
 - **57 apps** (catalog is now 177) and a new **🛡️ Security & Privacy** category. New: Vivaldi, Floorp, Visual Studio 2026, .NET 10 SDK, GitHub CLI, Zed, Sublime Text 4, Bruno, DBeaver, WinMerge, Oh My Posh, PuTTY, WinSCP, CMake, Temurin JDK 21, Bun, Kdenlive, Shotcut, Krita, Inkscape, Paint.NET, Kodi, yt-dlp, Joplin, Logseq, Zotero, Anki, SumatraPDF, ONLYOFFICE, Signal, Telegram, Flow Launcher, Espanso, RetroArch, Moonlight, RivaTuner Statistics Server, Process Explorer, WizTree, Bulk Crap Uninstaller, CrystalDiskMark, Display Driver Uninstaller, Ditto, AutoHotkey, LocalSend, RustDesk, qBittorrent, Tailscale, Auto Dark Mode, Nilesoft Shell, Twinkle Tray, KeePassXC, VeraCrypt, Cryptomator, Burp Suite Community, HxD, simplewall, Portmaster.
 - Taskbar progress bar during install / update batches.
 - Tile right-click: **Copy winget id** and **Copy install command**.
@@ -37,6 +42,7 @@ Per-monitor DPI pass, a round of bug fixes, and 57 new catalog apps.
 - Clearer messages for more winget exit codes (package not found, app is running, disk full, blocked by policy, downgrade, ...).
 
 ### Changed
+- **Faster startup:** winget is located in the background, so the window appears immediately instead of after `winget --version` returned (up to ~20 s per candidate on a cold machine). Install waits for detection if you click it early.
 - Bitwarden, Malwarebytes, Wireshark, O&O ShutUp10++, ProtonVPN, WireGuard and OpenVPN moved to **Security & Privacy**. Catalog `Id`s are unchanged, so existing packs still match.
 - Version bumped to **1.4.0** (`CornDownloader.csproj`, `App.manifest`, README).
 

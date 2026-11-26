@@ -1,0 +1,2 @@
+9f9ff47791683b8035c87b91a2853c3224b861a5ac480a18c2ee81e366569b35  CornDownloader-Setup-1.4.0.exe
+97782d0e0ce78b65d07db52f394724c9ba7f8e9469a869b9ae2a14d5c404c1ad  CornDownloader-1.4.0-portable.exe

@@ -58,6 +58,7 @@ namespace CornDownloader
         public static string SettingsFile => Path.Combine(DataDir, "settings.json");
         public static string CrashLog     => Path.Combine(DataDir, "crash.log");
         public static string LogsDir      => Path.Combine(DataDir, "logs");
+        public static string PresetsDir   => Path.Combine(DataDir, "presets");
 
         // The real Downloads known-folder (honours relocation / OneDrive redirection).
         // Falls back to %USERPROFILE%\Downloads if the shell call fails.

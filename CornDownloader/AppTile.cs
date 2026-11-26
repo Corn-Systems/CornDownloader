@@ -37,6 +37,8 @@ namespace CornDownloader
         private const int VERSION_OFFSET  = 22;    // extra height when version picker visible
 
         public event EventHandler CheckedChanged;
+        public event EventHandler UninstallRequested;   // MainForm confirms and runs it
+        public bool IsInstalled => _isInstalled;
 
         [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
         public bool IsChecked
@@ -401,6 +403,12 @@ namespace CornDownloader
                         };
                         cms.Items.Add(forceItem);
                     }
+                    if (!string.IsNullOrEmpty(_app.WingetId))
+                    {
+                        var uninstallItem = new ToolStripMenuItem("Uninstall...") { ForeColor = Theme.DANGER };
+                        uninstallItem.Click += (cs, ce) => UninstallRequested?.Invoke(this, EventArgs.Empty);
+                        cms.Items.Add(uninstallItem);
+                    }
                 }
                 else
                 {
@@ -586,9 +594,31 @@ namespace CornDownloader
             }
         }
 
+        // Free-form line in the status row (uninstall progress / result).
+        public void ShowNote(string text, Color color)
+        {
+            _statusDot.Text      = text;
+            _statusDot.ForeColor = color;
+            _statusDot.Visible   = !_logToggleBtn.Visible;
+            _updateBadge.Visible = false;
+            _progressBar.Visible = false;
+            Invalidate();
+        }
+
         public void SetInstalled(bool installed)
         {
+            bool was = _isInstalled;
             _isInstalled = installed;
+            if (!installed && was)
+            {
+                // Uninstalled: back to a normal, selectable tile.
+                _forceReinstall      = false;
+                _app.ForceReinstall  = false;
+                _statusDot.Text      = "";
+                _updateBadge.Visible = false;
+                BackColor            = _normalBg;
+                Cursor               = _app.HasInstallMethod ? Cursors.Hand : Cursors.No;
+            }
             if (installed)
             {
                 _forceReinstall    = false;
