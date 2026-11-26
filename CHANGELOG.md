@@ -1,6 +1,44 @@
 # Changelog
 
-All notable changes to Corn Downloader from **1.3.0** to **1.3.1**. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+All notable changes to Corn Downloader from **1.3.0** onward. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [1.4.0] - 2026-11-26
+
+Per-monitor DPI pass, a round of bug fixes, and 57 new catalog apps.
+
+### Fixed
+- **Per-monitor DPI:** moving the window to a monitor with different scaling only resized the four outer panels — every button, label, tile and font stayed at the old size. All chrome, tiles, section headers and the summary dialog now re-lay out on `DpiChanged`, and the window re-checks its DPI when it is first shown (opening on a secondary monitor) and when it regains focus.
+- **Fonts on mixed-DPI setups:** point-size fonts rasterise at the system DPI captured at logon, so text was the wrong size on a secondary monitor even after the layout scaled. Fonts are now built in pixels for the current monitor (`Theme.Font`) and cached (one shared instance per size instead of ~1,800 per launch).
+- **Per-app log drawer opened empty:** the log `RichTextBox` was created hidden inside the drawer and never shown, so "log ▸" revealed a blank panel.
+- **Cancelled / skipped apps stuck on "⏳ Installing..."** with their progress bar visible until restart (`SetStatus` had no `Skipped` case). They now show "⊘ Skipped".
+- **Sidebar categories rendered as "MEDIA  ENTERTAIN."** with an underlined E — `&` was treated as a mnemonic. Same fix for tile category badges, section headers and summary rows ("O&O ShutUp10++").
+- **Sidebar clipped at the minimum window height** (and at 150%+ scaling): Export/Import and the scan status fell off the bottom. The sidebar now scrolls vertically.
+- **Summary dialog:** the anchored Close button could end up off-screen (anchor computed against the footer's default 200 px width); rows ignored the panel padding; long errors overlapped the app name. Skipped apps are now listed too.
+- **Update badge / button out of date** after an install or upgrade succeeded through the normal Install flow.
+- **Cancel** could be clicked repeatedly and gave no feedback; it now disables itself and says it is waiting for the running installer.
+- **Install/Update buttons** were briefly clickable while waiting for the background scan to finish.
+- **MSI `SilentArgs` were ignored** even though the catalog docs said they applied.
+- **"Another install is in progress"** (winget `0x8A150102` / MSI 1618 caused by Windows Update or another installer) failed immediately; winget installs now wait 30 s and retry once.
+- **Update check** could report a phantom update for a `v1.4.0` tag against a `1.4` build (missing version components compared as -1).
+- **Import:** a pack entry without a pinned version kept a pin left over from earlier in the session; already-installed apps in a pack were reported as "not found in the catalog".
+- **Window size** was saved in raw pixels, so a size saved at 100% opened too small at 150% (and vice versa). It is now stored in logical pixels and clamped to the screen's working area (old settings are migrated once).
+- **Section headers** were wider than the grid's display area (padding not subtracted), which could add a horizontal scrollbar, and kept an event subscription alive after being disposed.
+- Tile hover flickered when the cursor moved over a label inside the tile; clicking the method badge / status text didn't toggle the tile.
+- The window and taskbar icon were the 32 px frame upscaled at high DPI; the taskbar selection badge was a fixed 16 px.
+- Long winget status lines ran underneath the Cancel/Clear buttons; the status text now ellipsises.
+
+### Added
+- **57 apps** (catalog is now 177) and a new **🛡️ Security & Privacy** category. New: Vivaldi, Floorp, Visual Studio 2026, .NET 10 SDK, GitHub CLI, Zed, Sublime Text 4, Bruno, DBeaver, WinMerge, Oh My Posh, PuTTY, WinSCP, CMake, Temurin JDK 21, Bun, Kdenlive, Shotcut, Krita, Inkscape, Paint.NET, Kodi, yt-dlp, Joplin, Logseq, Zotero, Anki, SumatraPDF, ONLYOFFICE, Signal, Telegram, Flow Launcher, Espanso, RetroArch, Moonlight, RivaTuner Statistics Server, Process Explorer, WizTree, Bulk Crap Uninstaller, CrystalDiskMark, Display Driver Uninstaller, Ditto, AutoHotkey, LocalSend, RustDesk, qBittorrent, Tailscale, Auto Dark Mode, Nilesoft Shell, Twinkle Tray, KeePassXC, VeraCrypt, Cryptomator, Burp Suite Community, HxD, simplewall, Portmaster.
+- Taskbar progress bar during install / update batches.
+- Tile right-click: **Copy winget id** and **Copy install command**.
+- Summary dialog: **Copy report** button; Esc / Enter close it.
+- **OPEN** button next to the download folder; search also matches category names, is debounced, and shows a "no apps match" message.
+- Shortcuts: Ctrl+F, Esc (clear search), Ctrl+A, Ctrl+Enter.
+- Clearer messages for more winget exit codes (package not found, app is running, disk full, blocked by policy, downgrade, ...).
+
+### Changed
+- Bitwarden, Malwarebytes, Wireshark, O&O ShutUp10++, ProtonVPN, WireGuard and OpenVPN moved to **Security & Privacy**. Catalog `Id`s are unchanged, so existing packs still match.
+- Version bumped to **1.4.0** (`CornDownloader.csproj`, `App.manifest`, README).
 
 ## [1.3.1] - 2026-11-13
 
@@ -34,4 +72,5 @@ Audit pass on top of 1.3.0: every catalog link and winget ID was checked against
 ### Project structure
 - File and folder names are now PascalCase in git as well as on disk (1.3.0 only renamed them on disk): the `CornDownloader/` folder, `MainForm.cs`, `Program.cs`, `DownloadManager.cs`, `AppCatalog.cs`, `App.manifest`, `CornDownloader.csproj`, `CornDownloader.sln`.
 
+[1.4.0]: https://github.com/Corn-Systems/CornDownloader/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/Corn-Systems/CornDownloader/compare/v1.3.0...v1.3.1

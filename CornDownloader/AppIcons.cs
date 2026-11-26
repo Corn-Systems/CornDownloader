@@ -4,6 +4,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using CornSystems;
 
 namespace CornDownloader
 {
@@ -13,17 +14,23 @@ namespace CornDownloader
     internal static class AppIconBuilder
     {
         private static Icon _cached;
+        private static int  _cachedSize;
 
+        // Sized for the current DPI. ExtractAssociatedIcon only ever returns the 32px frame,
+        // which Windows then upscaled (blurry) for the 150%+ title bar and Alt+Tab.
         public static Icon Get()
         {
-            if (_cached != null) return _cached;
+            int size = Math.Max(32, Dpi.S(32));
+            if (_cached != null && _cachedSize == size) return _cached;
+            _cachedSize = size;
             try
             {
-                _cached = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                _cached = Icon.ExtractIcon(Application.ExecutablePath, 0, size)
+                       ?? Icon.ExtractAssociatedIcon(Application.ExecutablePath);
                 if (_cached != null) return _cached;
             }
             catch (Exception ex) { SessionLog.Write("ICON", ex); }
-            _cached = Draw(32);
+            _cached = Draw(size);
             return _cached;
         }
 
@@ -89,6 +96,21 @@ namespace CornDownloader
             catch (Exception ex) { SessionLog.Write("TASKBAR", ex); }
         }
 
+        private const int TBPF_NOPROGRESS = 0, TBPF_NORMAL = 2;
+
+        // Green progress fill on the taskbar button during a batch. completed < 0 clears it.
+        public static void SetProgress(IntPtr hwnd, int completed, int total)
+        {
+            if (_taskbar == null || hwnd == IntPtr.Zero) return;
+            try
+            {
+                if (completed < 0) { _taskbar.SetProgressState(hwnd, TBPF_NOPROGRESS); return; }
+                _taskbar.SetProgressState(hwnd, TBPF_NORMAL);
+                _taskbar.SetProgressValue(hwnd, (ulong)Math.Max(0, completed), (ulong)Math.Max(1, total));
+            }
+            catch (Exception ex) { SessionLog.Write("TASKBAR", ex); }
+        }
+
         // Pass 0 to clear the badge.
         public static void SetCount(IntPtr hwnd, int count)
         {
@@ -97,7 +119,8 @@ namespace CornDownloader
             {
                 if (count <= 0) { _taskbar.SetOverlayIcon(hwnd, IntPtr.Zero, null); return; }
 
-                const int sz = 16;
+                // Overlay icons are drawn at the small-icon size, which grows with DPI.
+                int sz = Math.Max(16, Dpi.S(16));
                 using var bmp = new Bitmap(sz, sz, PixelFormat.Format32bppArgb);
                 using (var g = Graphics.FromImage(bmp))
                 {
@@ -109,8 +132,9 @@ namespace CornDownloader
                     g.FillEllipse(bgBrush, 0, 0, sz - 1, sz - 1);
 
                     string label = count > 99 ? "99+" : count.ToString();
-                    float  fs    = label.Length > 2 ? 5.5f : 7f;
-                    using var font = new Font(Theme.MonoFont, fs, FontStyle.Bold);
+                    // Pixel-sized so the digits fill the circle at any overlay size.
+                    float  fs    = sz * (label.Length > 2 ? 0.45f : label.Length > 1 ? 0.6f : 0.75f);
+                    using var font = new Font(Theme.MonoFont, fs, FontStyle.Bold, GraphicsUnit.Pixel);
                     using var tb   = new SolidBrush(Theme.ACCENT_TEXT);
                     using var sf   = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
                     g.DrawString(label, font, tb, new RectangleF(0, 0, sz, sz), sf);

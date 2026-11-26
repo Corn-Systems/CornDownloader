@@ -32,7 +32,8 @@ namespace CornDownloader
         /// Overrides the default silent-install argument string ("/S /silent /quiet /passive
         /// /norestart") used for direct-URL EXE installs. Set this when an installer's
         /// technology (Inno Setup, Squirrel, a custom bootstrapper, etc.) doesn't honor the
-        /// default flags. Null = use the default. Ignored for winget installs and .msi files.
+        /// default flags. Null = use the default. For .msi files it replaces "/passive
+        /// /norestart" on the msiexec command line. Ignored for winget installs.
         /// </summary>
         public string SilentArgs { get; set; }
         /// <summary>
@@ -367,7 +368,7 @@ namespace CornDownloader
             },
             new AppEntry {
                 Id = "Malwarebytes.Malwarebytes",
-                Name = "Malwarebytes", Category = "Utilities & System Tools", IconChar = "🛡️",
+                Name = "Malwarebytes", Category = "Security & Privacy", IconChar = "🛡️",
                 Description = "Anti-malware and threat protection",
                 WingetId = "Malwarebytes.Malwarebytes",
             },
@@ -452,7 +453,7 @@ namespace CornDownloader
             },
             new AppEntry {
                 Id = "WiresharkFoundation.Wireshark",
-                Name = "Wireshark", Category = "Dev Tools", IconChar = "🦈",
+                Name = "Wireshark", Category = "Security & Privacy", IconChar = "🦈",
                 Description = "Network protocol analyser and packet capture",
                 WingetId = "WiresharkFoundation.Wireshark",
             },
@@ -498,19 +499,19 @@ namespace CornDownloader
             },
             new AppEntry {
                 Id = "OpenVPNTechnologies.OpenVPN",
-                Name = "OpenVPN", Category = "Utilities & System Tools", IconChar = "🔒",
+                Name = "OpenVPN", Category = "Security & Privacy", IconChar = "🔒",
                 Description = "Open-source VPN client and server",
                 WingetId = "OpenVPNTechnologies.OpenVPN",
             },
             new AppEntry {
                 Id = "ProtonTechnologies.ProtonVPN",
-                Name = "ProtonVPN", Category = "Utilities & System Tools", IconChar = "🔏",
+                Name = "ProtonVPN", Category = "Security & Privacy", IconChar = "🔏",
                 Description = "Secure, privacy-first VPN by Proton",
                 WingetId = "Proton.ProtonVPN",
             },
             new AppEntry {
                 Id = "WireGuard.WireGuard",
-                Name = "WireGuard", Category = "Utilities & System Tools", IconChar = "🔐",
+                Name = "WireGuard", Category = "Security & Privacy", IconChar = "🔐",
                 Description = "Fast, modern, secure VPN tunnel",
                 WingetId = "WireGuard.WireGuard",
             },
@@ -624,7 +625,7 @@ namespace CornDownloader
             // ── PRODUCTIVITY (new) ────────────────────────────────────────────
             new AppEntry {
                 Id = "Bitwarden.Bitwarden",
-                Name = "Bitwarden", Category = "Productivity", IconChar = "🔑",
+                Name = "Bitwarden", Category = "Security & Privacy", IconChar = "🔑",
                 Description = "Free and open source password manager",
                 WingetId = "Bitwarden.Bitwarden",
             },
@@ -843,7 +844,7 @@ namespace CornDownloader
             },
             new AppEntry {
                 Id = "OO-Software.ShutUp10",
-                Name = "O&O ShutUp10++", Category = "Utilities & System Tools", IconChar = "🔕",
+                Name = "O&O ShutUp10++", Category = "Security & Privacy", IconChar = "🔕",
                 Description = "Windows 10/11 privacy and telemetry control tool",
                 WingetId = "OO-Software.ShutUp10",
             },
@@ -897,6 +898,365 @@ namespace CornDownloader
                 // NVIDIA's installer uses its own switch set, not the default flags.
                 SilentArgs = "-s -noreboot -noeula -nofinish -passive",
             },
+
+            // ── BROWSERS (batch 4 — Nov 2026) ────────────────────────────────
+            new AppEntry {
+                Id = "Vivaldi.Vivaldi",
+                Name = "Vivaldi", Category = "Browsers", IconChar = "🎼",
+                Description = "Power-user browser with tab stacks, panels and built-in mail",
+                WingetId = "Vivaldi.Vivaldi",
+            },
+            new AppEntry {
+                Id = "Ablaze.Floorp",
+                Name = "Floorp", Category = "Browsers", IconChar = "🌸",
+                Description = "Highly customizable Firefox-based browser",
+                WingetId = "Ablaze.Floorp",
+            },
+
+            // ── DEV TOOLS (batch 4 — Nov 2026) ───────────────────────────────
+            new AppEntry {
+                Id = "Microsoft.VisualStudio.Community",
+                Name = "Visual Studio 2026 Community", Category = "Dev Tools", IconChar = "♾️",
+                Description = "Microsoft's full IDE for .NET, C++ and more (current release)",
+                WingetId = "Microsoft.VisualStudio.Community",
+            },
+            new AppEntry {
+                Id = "Microsoft.DotNet.SDK.10",
+                Name = ".NET 10 SDK", Category = "Dev Tools", IconChar = "🟪",
+                Description = "SDK for building C#, F# and WinForms/WPF apps",
+                WingetId = "Microsoft.DotNet.SDK.10",
+            },
+            new AppEntry {
+                Id = "GitHub.cli",
+                Name = "GitHub CLI", Category = "Dev Tools", IconChar = "🐈",
+                Description = "Work with GitHub issues, PRs and releases from the terminal",
+                WingetId = "GitHub.cli",
+            },
+            new AppEntry {
+                Id = "ZedIndustries.Zed",
+                Name = "Zed", Category = "Dev Tools", IconChar = "🏎️",
+                Description = "Fast, GPU-accelerated code editor written in Rust",
+                WingetId = "ZedIndustries.Zed",
+            },
+            new AppEntry {
+                Id = "SublimeHQ.SublimeText.4",
+                Name = "Sublime Text 4", Category = "Dev Tools", IconChar = "🟧",
+                Description = "Fast, lightweight text and code editor",
+                WingetId = "SublimeHQ.SublimeText.4",
+            },
+            new AppEntry {
+                Id = "Bruno.Bruno",
+                Name = "Bruno", Category = "Dev Tools", IconChar = "🐶",
+                Description = "Offline, Git-friendly open-source API client",
+                WingetId = "Bruno.Bruno",
+            },
+            new AppEntry {
+                Id = "DBeaver.DBeaver.Community",
+                Name = "DBeaver Community", Category = "Dev Tools", IconChar = "🦫",
+                Description = "Universal database client for SQL and NoSQL",
+                WingetId = "DBeaver.DBeaver.Community",
+            },
+            new AppEntry {
+                Id = "WinMerge.WinMerge",
+                Name = "WinMerge", Category = "Dev Tools", IconChar = "⚖️",
+                Description = "Visual diff and merge for files and folders",
+                WingetId = "WinMerge.WinMerge",
+            },
+            new AppEntry {
+                Id = "JanDeDobbeleer.OhMyPosh",
+                Name = "Oh My Posh", Category = "Dev Tools", IconChar = "💲",
+                Description = "Prompt theme engine for PowerShell, cmd and bash",
+                WingetId = "JanDeDobbeleer.OhMyPosh",
+            },
+            new AppEntry {
+                Id = "PuTTY.PuTTY",
+                Name = "PuTTY", Category = "Dev Tools", IconChar = "🐚",
+                Description = "Classic SSH, telnet and serial console client",
+                WingetId = "PuTTY.PuTTY",
+            },
+            new AppEntry {
+                Id = "WinSCP.WinSCP",
+                Name = "WinSCP", Category = "Dev Tools", IconChar = "📤",
+                Description = "SFTP, SCP and FTP file transfer client",
+                WingetId = "WinSCP.WinSCP",
+            },
+            new AppEntry {
+                Id = "Kitware.CMake",
+                Name = "CMake", Category = "Dev Tools", IconChar = "🔺",
+                Description = "Cross-platform build system generator",
+                WingetId = "Kitware.CMake",
+            },
+            new AppEntry {
+                Id = "EclipseAdoptium.Temurin.21.JDK",
+                Name = "Java 21 (Temurin JDK)", Category = "Dev Tools", IconChar = "☕",
+                Description = "Free OpenJDK 21 LTS build from Eclipse Adoptium",
+                WingetId = "EclipseAdoptium.Temurin.21.JDK",
+            },
+            new AppEntry {
+                Id = "Oven-sh.Bun",
+                Name = "Bun", Category = "Dev Tools", IconChar = "🥟",
+                Description = "All-in-one JavaScript runtime, bundler and package manager",
+                WingetId = "Oven-sh.Bun",
+            },
+
+            // ── MEDIA & ENTERTAINMENT (batch 4 — Nov 2026) ───────────────────
+            new AppEntry {
+                Id = "KDE.Kdenlive",
+                Name = "Kdenlive", Category = "Media & Entertainment", IconChar = "🎥",
+                Description = "Open-source multi-track video editor",
+                WingetId = "KDE.Kdenlive",
+            },
+            new AppEntry {
+                Id = "Meltytech.Shotcut",
+                Name = "Shotcut", Category = "Media & Entertainment", IconChar = "✂️",
+                Description = "Free cross-platform video editor",
+                WingetId = "Meltytech.Shotcut",
+            },
+            new AppEntry {
+                Id = "KDE.Krita",
+                Name = "Krita", Category = "Media & Entertainment", IconChar = "🖍️",
+                Description = "Professional open-source digital painting",
+                WingetId = "KDE.Krita",
+            },
+            new AppEntry {
+                Id = "Inkscape.Inkscape",
+                Name = "Inkscape", Category = "Media & Entertainment", IconChar = "🖋️",
+                Description = "Open-source vector graphics editor (SVG)",
+                WingetId = "Inkscape.Inkscape",
+            },
+            new AppEntry {
+                Id = "dotPDN.PaintDotNet",
+                Name = "Paint.NET", Category = "Media & Entertainment", IconChar = "🌈",
+                Description = "Fast, simple image and photo editor with layers",
+                WingetId = "dotPDN.PaintDotNet",
+            },
+            new AppEntry {
+                Id = "XBMCFoundation.Kodi",
+                Name = "Kodi", Category = "Media & Entertainment", IconChar = "🍿",
+                Description = "Open-source media center for your library",
+                WingetId = "XBMCFoundation.Kodi",
+            },
+            new AppEntry {
+                Id = "yt-dlp.yt-dlp",
+                Name = "yt-dlp", Category = "Media & Entertainment", IconChar = "📥",
+                Description = "Command-line video and audio downloader",
+                WingetId = "yt-dlp.yt-dlp",
+            },
+
+            // ── PRODUCTIVITY (batch 4 — Nov 2026) ────────────────────────────
+            new AppEntry {
+                Id = "Joplin.Joplin",
+                Name = "Joplin", Category = "Productivity", IconChar = "🗒️",
+                Description = "Open-source Markdown notes with encrypted sync",
+                WingetId = "Joplin.Joplin",
+            },
+            new AppEntry {
+                Id = "Logseq.Logseq",
+                Name = "Logseq", Category = "Productivity", IconChar = "🪢",
+                Description = "Privacy-first outliner and knowledge base",
+                WingetId = "Logseq.Logseq",
+            },
+            new AppEntry {
+                Id = "DigitalScholar.Zotero",
+                Name = "Zotero", Category = "Productivity", IconChar = "🎓",
+                Description = "Collect, organize and cite research sources",
+                WingetId = "DigitalScholar.Zotero",
+            },
+            new AppEntry {
+                Id = "Anki.Anki",
+                Name = "Anki", Category = "Productivity", IconChar = "🃏",
+                Description = "Spaced-repetition flashcards for studying",
+                WingetId = "Anki.Anki",
+            },
+            new AppEntry {
+                Id = "SumatraPDF.SumatraPDF",
+                Name = "SumatraPDF", Category = "Productivity", IconChar = "📕",
+                Description = "Tiny, fast PDF, ePub and comic reader",
+                WingetId = "SumatraPDF.SumatraPDF",
+            },
+            new AppEntry {
+                Id = "ONLYOFFICE.DesktopEditors",
+                Name = "ONLYOFFICE", Category = "Productivity", IconChar = "🧾",
+                Description = "Office suite with strong Word/Excel compatibility",
+                WingetId = "ONLYOFFICE.DesktopEditors",
+            },
+            new AppEntry {
+                Id = "OpenWhisperSystems.Signal",
+                Name = "Signal", Category = "Productivity", IconChar = "📨",
+                Description = "End-to-end encrypted messaging and calls",
+                WingetId = "OpenWhisperSystems.Signal",
+            },
+            new AppEntry {
+                Id = "Telegram.TelegramDesktop",
+                Name = "Telegram", Category = "Productivity", IconChar = "✈️",
+                Description = "Fast cloud-based messenger",
+                WingetId = "Telegram.TelegramDesktop",
+            },
+            new AppEntry {
+                Id = "Flow-Launcher.Flow-Launcher",
+                Name = "Flow Launcher", Category = "Productivity", IconChar = "🔎",
+                Description = "Keyboard launcher for apps, files and web search",
+                WingetId = "Flow-Launcher.Flow-Launcher",
+            },
+            new AppEntry {
+                Id = "Espanso.Espanso",
+                Name = "Espanso", Category = "Productivity", IconChar = "✍️",
+                Description = "Open-source text expander for snippets",
+                WingetId = "Espanso.Espanso",
+            },
+
+            // ── GAMING (batch 4 — Nov 2026) ──────────────────────────────────
+            new AppEntry {
+                Id = "Libretro.RetroArch",
+                Name = "RetroArch", Category = "Gaming", IconChar = "👾",
+                Description = "All-in-one front-end for emulators and game engines",
+                WingetId = "Libretro.RetroArch",
+            },
+            new AppEntry {
+                Id = "MoonlightGameStreamingProject.Moonlight",
+                Name = "Moonlight", Category = "Gaming", IconChar = "🌙",
+                Description = "Stream games from your PC (pairs with Sunshine)",
+                WingetId = "MoonlightGameStreamingProject.Moonlight",
+            },
+            new AppEntry {
+                Id = "Guru3D.RTSS",
+                Name = "RivaTuner Statistics Server", Category = "Gaming", IconChar = "⏱️",
+                Description = "Frame-rate limiter and on-screen performance stats",
+                WingetId = "Guru3D.RTSS",
+            },
+
+            // ── UTILITIES & SYSTEM TOOLS (batch 4 — Nov 2026) ────────────────
+            new AppEntry {
+                Id = "Microsoft.Sysinternals.ProcessExplorer",
+                Name = "Process Explorer", Category = "Utilities & System Tools", IconChar = "🧬",
+                Description = "Sysinternals' in-depth Task Manager replacement",
+                WingetId = "Microsoft.Sysinternals.ProcessExplorer",
+            },
+            new AppEntry {
+                Id = "AntibodySoftware.WizTree",
+                Name = "WizTree", Category = "Utilities & System Tools", IconChar = "🌳",
+                Description = "Extremely fast disk-space analyzer",
+                WingetId = "AntibodySoftware.WizTree",
+            },
+            new AppEntry {
+                Id = "Klocman.BulkCrapUninstaller",
+                Name = "Bulk Crap Uninstaller", Category = "Utilities & System Tools", IconChar = "♻️",
+                Description = "Remove many apps and their leftovers at once",
+                WingetId = "Klocman.BulkCrapUninstaller",
+            },
+            new AppEntry {
+                Id = "CrystalDewWorld.CrystalDiskMark",
+                Name = "CrystalDiskMark", Category = "Utilities & System Tools", IconChar = "💿",
+                Description = "Drive read/write speed benchmark",
+                WingetId = "CrystalDewWorld.CrystalDiskMark",
+            },
+            new AppEntry {
+                Id = "Wagnardsoft.DisplayDriverUninstaller",
+                Name = "Display Driver Uninstaller", Category = "Utilities & System Tools", IconChar = "🧽",
+                Description = "Completely remove GPU drivers before a clean install",
+                WingetId = "Wagnardsoft.DisplayDriverUninstaller",
+            },
+            new AppEntry {
+                Id = "Ditto.Ditto",
+                Name = "Ditto", Category = "Utilities & System Tools", IconChar = "📎",
+                Description = "Clipboard history manager",
+                WingetId = "Ditto.Ditto",
+            },
+            new AppEntry {
+                Id = "AutoHotkey.AutoHotkey",
+                Name = "AutoHotkey", Category = "Utilities & System Tools", IconChar = "⌨️",
+                Description = "Hotkeys, macros and desktop automation scripting",
+                WingetId = "AutoHotkey.AutoHotkey",
+            },
+            new AppEntry {
+                Id = "LocalSend.LocalSend",
+                Name = "LocalSend", Category = "Utilities & System Tools", IconChar = "📲",
+                Description = "AirDrop-style file sharing over your local network",
+                WingetId = "LocalSend.LocalSend",
+            },
+            new AppEntry {
+                Id = "RustDesk.RustDesk",
+                Name = "RustDesk", Category = "Utilities & System Tools", IconChar = "🛰️",
+                Description = "Open-source remote desktop (TeamViewer alternative)",
+                WingetId = "RustDesk.RustDesk",
+            },
+            new AppEntry {
+                Id = "qBittorrent.qBittorrent",
+                Name = "qBittorrent", Category = "Utilities & System Tools", IconChar = "🧲",
+                Description = "Ad-free open-source BitTorrent client",
+                WingetId = "qBittorrent.qBittorrent",
+            },
+            new AppEntry {
+                Id = "tailscale.tailscale",
+                Name = "Tailscale", Category = "Utilities & System Tools", IconChar = "🔗",
+                Description = "Zero-config WireGuard mesh VPN between your devices",
+                WingetId = "tailscale.tailscale",
+            },
+
+            // ── CUSTOMIZATION (batch 4 — Nov 2026) ───────────────────────────
+            new AppEntry {
+                Id = "Armin2208.WindowsAutoNightMode",
+                Name = "Auto Dark Mode", Category = "Customization", IconChar = "🌓",
+                Description = "Switch light/dark theme on a schedule or at sunset",
+                WingetId = "Armin2208.WindowsAutoNightMode",
+            },
+            new AppEntry {
+                Id = "Nilesoft.Shell",
+                Name = "Nilesoft Shell", Category = "Customization", IconChar = "📑",
+                Description = "Rebuild and customize the Explorer right-click menu",
+                WingetId = "Nilesoft.Shell",
+            },
+            new AppEntry {
+                Id = "xanderfrangos.twinkletray",
+                Name = "Twinkle Tray", Category = "Customization", IconChar = "🔆",
+                Description = "Brightness sliders for external monitors",
+                WingetId = "xanderfrangos.twinkletray",
+            },
+
+            // ── SECURITY & PRIVACY (batch 4 — Nov 2026) ──────────────────────
+            new AppEntry {
+                Id = "KeePassXCTeam.KeePassXC",
+                Name = "KeePassXC", Category = "Security & Privacy", IconChar = "🗝️",
+                Description = "Offline, open-source password manager",
+                WingetId = "KeePassXCTeam.KeePassXC",
+            },
+            new AppEntry {
+                Id = "IDRIX.VeraCrypt",
+                Name = "VeraCrypt", Category = "Security & Privacy", IconChar = "🏰",
+                Description = "Encrypted containers and full-disk encryption",
+                WingetId = "IDRIX.VeraCrypt",
+            },
+            new AppEntry {
+                Id = "Cryptomator.Cryptomator",
+                Name = "Cryptomator", Category = "Security & Privacy", IconChar = "☁️",
+                Description = "Client-side encryption for your cloud storage",
+                WingetId = "Cryptomator.Cryptomator",
+            },
+            new AppEntry {
+                Id = "PortSwigger.BurpSuite",
+                Name = "Burp Suite Community", Category = "Security & Privacy", IconChar = "🕷️",
+                Description = "Web application security testing toolkit",
+                WingetId = "PortSwigger.BurpSuite",
+            },
+            new AppEntry {
+                Id = "MHNexus.HxD",
+                Name = "HxD", Category = "Security & Privacy", IconChar = "🧮",
+                Description = "Fast hex, disk and RAM editor",
+                WingetId = "MHNexus.HxD",
+            },
+            new AppEntry {
+                Id = "Henry++.simplewall",
+                Name = "simplewall", Category = "Security & Privacy", IconChar = "🧱",
+                Description = "Lightweight firewall built on Windows Filtering Platform",
+                WingetId = "Henry++.simplewall",
+            },
+            new AppEntry {
+                Id = "Safing.Portmaster",
+                Name = "Portmaster", Category = "Security & Privacy", IconChar = "🚦",
+                Description = "Open-source application firewall and network monitor",
+                WingetId = "Safing.Portmaster",
+            },
+
         };
     }
 }

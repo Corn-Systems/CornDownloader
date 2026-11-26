@@ -58,6 +58,10 @@ namespace CornDownloader
         private RichTextBox     _logBox;
         private Panel           _logPanel;
         private Label           _scanStatusLabel;
+        private Label           _emptyLabel;
+        // Every DPI-dependent size/position/font in the chrome registers here so a monitor
+        // change can re-run it (see DpiLayout).
+        private readonly DpiLayout _dpi = new();
         // One ToolTip shared by every tile — 100+ per-tile instances leaked native windows.
         private readonly ToolTip _sharedTileTip = new ToolTip
         {
@@ -88,6 +92,15 @@ namespace CornDownloader
                 catch (Exception ex) { SessionLog.Write("CLOSE", ex); }   // a cancellation callback threw
                 SaveSettings();
                 _sharedTileTip.Dispose();
+            };
+
+            // Ctrl+F jumps to search, Ctrl+A selects everything in view, Ctrl+Enter installs.
+            KeyPreview = true;
+            KeyDown += (s, e) =>
+            {
+                if (e.Control && e.KeyCode == Keys.F) { _searchBox.Focus(); _searchBox.SelectAll(); e.SuppressKeyPress = true; }
+                else if (e.Control && e.KeyCode == Keys.Enter && !_isInstalling) { _installBtn.PerformClick(); e.SuppressKeyPress = true; }
+                else if (e.Control && e.KeyCode == Keys.A && !(ActiveControl is TextBoxBase)) { SetAllInView(true); e.SuppressKeyPress = true; }
             };
 
             // Also save on meaningful state changes so a crash doesn't lose settings.
@@ -216,10 +229,19 @@ namespace CornDownloader
 
         private void ApplySettings()
         {
+            if (_settings.WindowWidth > 0 && _settings.WindowHeight > 0)
+            {
+                // Saved sizes are logical (96-DPI) pixels so they mean the same thing on a
+                // 100% and a 150% monitor. Pre-1.4 settings stored raw pixels.
+                var saved = _settings.SizeIsLogical
+                    ? new Size(Dpi.S(_settings.WindowWidth), Dpi.S(_settings.WindowHeight))
+                    : new Size(_settings.WindowWidth, _settings.WindowHeight);
+                var work = Screen.FromPoint(Cursor.Position).WorkingArea;
+                this.Size = new Size(Math.Clamp(saved.Width,  MinimumSize.Width,  Math.Max(MinimumSize.Width,  work.Width)),
+                                     Math.Clamp(saved.Height, MinimumSize.Height, Math.Max(MinimumSize.Height, work.Height)));
+            }
             if (_settings.WindowState == "Maximized")
                 this.WindowState = FormWindowState.Maximized;
-            else if (_settings.WindowWidth > 0 && _settings.WindowHeight > 0)
-                this.Size = new Size(_settings.WindowWidth, _settings.WindowHeight);
 
             string folder = _cli?.Folder ?? _settings.DownloadFolder;
             if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
@@ -241,8 +263,9 @@ namespace CornDownloader
             _settings.WindowState    = this.WindowState == FormWindowState.Maximized ? "Maximized" : "Normal";
             if (this.WindowState == FormWindowState.Normal)
             {
-                _settings.WindowWidth  = this.Width;
-                _settings.WindowHeight = this.Height;
+                _settings.WindowWidth   = (int)Math.Round(this.Width  / Dpi.Scale);
+                _settings.WindowHeight  = (int)Math.Round(this.Height / Dpi.Scale);
+                _settings.SizeIsLogical = true;
             }
             SettingsManager.Save(_settings);
         }
@@ -290,16 +313,20 @@ namespace CornDownloader
 
             Ui(() =>
             {
-                int count = _upgradeCache.Values.Count(v => v);
-                if (_upgradeBtn != null)
-                {
-                    _upgradeBtn.Visible = count > 0;
-                    _upgradeBtn.Text    = $"⬆  Update {count} App{(count == 1 ? "" : "s")}";
-                    LayoutPanels();
-                }
                 foreach (var kv in _tiles)
                     if (_upgradeCache.TryGetValue(kv.Key, out bool u)) kv.Value.SetHasUpdate(u);
+                RefreshUpgradeButton();
             });
+        }
+
+        private void RefreshUpgradeButton()
+        {
+            if (_upgradeBtn == null) return;
+            int count = _upgradeCache.Values.Count(v => v);
+            _upgradeBtn.Visible = count > 0;
+            _upgradeBtn.Enabled = count > 0 && !_isInstalling;
+            _upgradeBtn.Text    = count > 0 ? $"⬆  Update {count} App{(count == 1 ? "" : "s")}" : "";
+            LayoutPanels();
         }
 
         private async Task WaitForBackgroundScanAsync()
@@ -321,12 +348,15 @@ namespace CornDownloader
             if (toUpgrade.Count == 0) return;
 
             _isInstalling = true;   // claim the slot before the first await so a second click can't start another batch
+            _upgradeBtn.Enabled = false;
             await WaitForBackgroundScanAsync();
+            if (_closing || IsDisposed) return;
 
             _cts = new CancellationTokenSource();
             var token = _cts.Token;
-            _isInstalling = true; _upgradeBtn.Enabled = false; _upgradeBtn.Text = "⏳ Updating...";
+            _upgradeBtn.Enabled = false; _upgradeBtn.Text = "⏳ Updating...";
             _installBtn.Enabled = false;
+            _cancelBtn.Enabled = true;
             _cancelBtn.Visible = true;
             _overallProgress.Maximum = toUpgrade.Count; _overallProgress.Value = 0;
             int done = 0;
@@ -343,7 +373,7 @@ namespace CornDownloader
                         {
                             _statusLabel.Text = $"{app.Name}: {msg}";
                             Log($"[{app.Name}] {msg}");
-                            if (_tiles.TryGetValue(app, out var t)) t.AppendLog(msg);
+                            if (_tiles.TryGetValue(app, out var t)) { t.SetStatus(InstallStatus.Installing); t.AppendLog(msg); }
                         }),
                         token);
                     results.Add(result);
@@ -351,7 +381,11 @@ namespace CornDownloader
                     Ui(() =>
                     {
                         _overallProgress.Value = done;
-                        if (_tiles.TryGetValue(app, out var tile)) tile.SetStatus(result.Status);
+                        if (_tiles.TryGetValue(app, out var tile))
+                        {
+                            tile.SetStatus(result.Status);
+                            if (result.Status == InstallStatus.Success) tile.SetHasUpdate(false);
+                        }
                         if (result.Status == InstallStatus.Success) _upgradeCache[app] = false;
                     });
                 }
@@ -365,7 +399,7 @@ namespace CornDownloader
             {
                 _isInstalling = false; _installBtn.Enabled = true;
                 _cancelBtn.Visible = false;
-                _cts.Dispose(); _cts = null;
+                _cts?.Dispose(); _cts = null;
             }
             if (_closing || IsDisposed) return;   // window closed mid-upgrade — nothing left to update
 
@@ -374,11 +408,7 @@ namespace CornDownloader
             _statusLabel.Text = $"Updates done — {ok} succeeded, {fail} failed.";
             Log($"[UPGRADE DONE] {ok}/{toUpgrade.Count} — {DateTime.Now:HH:mm:ss}");
 
-            int remaining = _upgradeCache.Values.Count(v => v);
-            _upgradeBtn.Visible = remaining > 0;
-            _upgradeBtn.Text    = remaining > 0 ? $"⬆  Update {remaining} App{(remaining == 1 ? "" : "s")}" : "";
-            _upgradeBtn.Enabled = remaining > 0;
-            LayoutPanels();
+            RefreshUpgradeButton();
 
             if (!token.IsCancellationRequested)
             {
@@ -449,29 +479,29 @@ namespace CornDownloader
 
                 foreach (var tile in _tiles.Values) tile.IsChecked = false;
 
-                int matched = 0;
+                int matched = 0, alreadyInstalled = 0;
                 foreach (var packed in pack.Apps)
                 {
                     var entry = AppCatalog.Find(packed.Id, packed.Name);
                     if (entry == null || !_tiles.TryGetValue(entry, out var tile)) continue;
+                    if (_installedCache.TryGetValue(entry, out bool inst) && inst) { alreadyInstalled++; continue; }
 
                     tile.IsChecked = true;
                     // PinnedVersion is session-scoped: it lives on the catalog entry until restart.
-                    if (!string.IsNullOrEmpty(packed.PinnedVersion))
-                    {
-                        entry.PinnedVersion = packed.PinnedVersion;
-                        tile.SetPinnedVersion(packed.PinnedVersion);
-                    }
-                    matched++;
+                    // A pack without a pin means "latest", so clear any pin left from earlier.
+                    entry.PinnedVersion = string.IsNullOrEmpty(packed.PinnedVersion) ? null : packed.PinnedVersion;
+                    tile.SetPinnedVersion(entry.PinnedVersion);
+                    if (tile.IsChecked) matched++;
                 }
 
                 UpdateSelectionCount();
-                _statusLabel.Text = $"✔ Imported {matched}/{pack.Apps.Count} apps from pack.";
+                _statusLabel.Text = $"✔ Imported {matched}/{pack.Apps.Count} apps from pack" +
+                                    (alreadyInstalled > 0 ? $" ({alreadyInstalled} already installed)." : ".");
                 Log($"[IMPORT] {matched}/{pack.Apps.Count} apps ← {dlg.FileName}");
 
-                if (matched < pack.Apps.Count)
+                if (matched + alreadyInstalled < pack.Apps.Count)
                 {
-                    int missing = pack.Apps.Count - matched;
+                    int missing = pack.Apps.Count - matched - alreadyInstalled;
                     MessageBox.Show(
                         $"{missing} app{(missing == 1 ? "" : "s")} in the pack weren't found in the catalog (may have been removed or renamed).",
                         "Partial import", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -497,10 +527,13 @@ namespace CornDownloader
             int catCount = AppCatalog.All.Select(a => a.Category).Distinct().Count();
             this.Text = $"{AppInfo.Name} {AppInfo.Version} — {appCount} apps • {catCount} categories";
             this.Size            = new Size(Dpi.S(1180), Dpi.S(760));
-            this.MinimumSize     = new Size(Dpi.S(900),  Dpi.S(600));
+            _dpi.Add(() =>
+            {
+                this.MinimumSize = new Size(Dpi.S(900), Dpi.S(600));
+                this.Font        = Theme.Font(Theme.MonoFont, 8.5f);
+            });
             this.BackColor       = Theme.BG;
             this.ForeColor       = Theme.TEXT_PRI;
-            this.Font            = new Font(Theme.MonoFont, 8.5f, FontStyle.Regular);
             this.StartPosition   = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;
 
@@ -513,15 +546,23 @@ namespace CornDownloader
             this.Resize += (s, e) => LayoutPanels();
             LayoutPanels();
 
-            DpiChanged += (s, e) =>
-            {
-                Dpi.Update(e.DeviceDpiNew);
-                if (e.SuggestedRectangle != Rectangle.Empty)
-                    SetBounds(e.SuggestedRectangle.X, e.SuggestedRectangle.Y,
-                              e.SuggestedRectangle.Width, e.SuggestedRectangle.Height);
-                MinimumSize = new Size(Dpi.S(900), Dpi.S(600));
-                LayoutPanels();
-            };
+            DpiLayout.Attach(this, RescaleForDpi);
+        }
+
+        // Runs after the window moves to a monitor with a different scale factor (or opens
+        // on one). Re-applies every registered chrome metric, re-scales the cached tiles,
+        // and rebuilds the section headers at the new size.
+        private void RescaleForDpi()
+        {
+            // Absolute child positions in an AutoScroll panel are relative to the current
+            // scroll offset — scroll home first so re-applied Locations land where intended.
+            _sidebar.AutoScrollPosition = Point.Empty;
+            _dpi.Reapply();
+            foreach (var tile in _tiles.Values) tile.ApplyDpi();
+            PopulateApps(_activeCategory);
+            LayoutPanels();
+            TaskbarBadge.SetCount(IsHandleCreated ? Handle : IntPtr.Zero, _initialized ? _tiles.Values.Count(t => t.IsChecked) : 0);
+            try { this.Icon = AppIconBuilder.Get(); } catch (Exception ex) { SessionLog.Write("ICON", ex); }
         }
 
         private void LayoutPanels()
@@ -554,6 +595,10 @@ namespace CornDownloader
                 if (_cancelBtn != null)
                     _cancelBtn.Location = new Point(_clearBtn.Left - Dpi.S(8) - _cancelBtn.Width, Dpi.S(42));
                 _logToggle.Location  = new Point(bw - Dpi.S(16) - _logToggle.Width, Dpi.S(11));
+
+                // Status text gets whatever is left of the row and ellipsises past that.
+                int statusRight = (_cancelBtn ?? _clearBtn).Left - Dpi.S(12);
+                _statusLabel.Width = Math.Max(Dpi.S(120), statusRight - _statusLabel.Left);
             }
 
             if (_updateLink != null && _upgradeBtn != null)
@@ -572,40 +617,53 @@ namespace CornDownloader
         {
             _topBar = new Panel { BackColor = Theme.SURFACE, Dock = DockStyle.None };
 
-            var accentBar = new Panel
-            {
-                BackColor = Theme.ACCENT,
-                Size      = new Size(Dpi.S(3), Dpi.S(34)),
-                Location  = new Point(Dpi.S(14), Dpi.S(13))
-            };
+            var accentBar = new Panel { BackColor = Theme.ACCENT };
+            _dpi.Add(() => accentBar.SetBounds(Dpi.S(14), Dpi.S(13), Dpi.S(3), Dpi.S(34)));
 
             var titleLbl = new Label
             {
                 Text      = "🌽  CORN_DOWNLOADER",
-                Font      = new Font(Theme.MonoFont, 9.5f, FontStyle.Bold),
                 ForeColor = Theme.ACCENT,
                 AutoSize  = true,
-                Location  = new Point(Dpi.S(24), Dpi.S(19))
+                UseMnemonic = false
             };
+            _dpi.Add(() =>
+            {
+                titleLbl.Font     = Theme.Font(Theme.MonoFont, 9.5f, FontStyle.Bold);
+                titleLbl.Location = new Point(Dpi.S(24), Dpi.S(19));
+            });
 
             _searchBox = new TextBox
             {
-                PlaceholderText = "  search apps...",
+                PlaceholderText = "  search apps...  (Ctrl+F)",
                 BackColor       = Theme.CARD,
                 ForeColor       = Theme.TEXT_PRI,
-                BorderStyle     = BorderStyle.FixedSingle,
-                Font            = new Font(Theme.MonoFont, 9f),
-                Size            = new Size(Dpi.S(240), Dpi.S(28)),
-                Location        = new Point(Dpi.S(255), Dpi.S(16))
+                BorderStyle     = BorderStyle.FixedSingle
             };
-            _searchBox.TextChanged += (s, e) => PopulateApps(_activeCategory);
-
-            _wingetBadge = new Label
+            _dpi.Add(() =>
             {
-                AutoSize = true,
-                Font     = new Font(Theme.MonoFont, 7.5f),
-                Location = new Point(Dpi.S(510), Dpi.S(21))
+                _searchBox.Font     = Theme.Font(Theme.MonoFont, 9f);
+                // Keep the box clear of the title at any scale (the title is AutoSize).
+                _searchBox.Location = new Point(Math.Max(Dpi.S(255), titleLbl.Right + Dpi.S(16)), Dpi.S(16));
+                _searchBox.Width    = Dpi.S(240);
+            });
+            // Debounced: re-filtering ~170 tiles on every keystroke made typing stutter.
+            var searchDebounce = new System.Windows.Forms.Timer { Interval = 180 };
+            searchDebounce.Tick += (s, e) => { searchDebounce.Stop(); PopulateApps(_activeCategory); };
+            _searchBox.TextChanged += (s, e) => { searchDebounce.Stop(); searchDebounce.Start(); };
+            _searchBox.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Escape) { _searchBox.Clear(); e.SuppressKeyPress = true; }
+                else if (e.KeyCode == Keys.Enter) { searchDebounce.Stop(); PopulateApps(_activeCategory); e.SuppressKeyPress = true; }
             };
+            FormClosed += (s, e) => searchDebounce.Dispose();
+
+            _wingetBadge = new Label { AutoSize = true };
+            _dpi.Add(() =>
+            {
+                _wingetBadge.Font     = Theme.Font(Theme.MonoFont, 7.5f);
+                _wingetBadge.Location = new Point(_searchBox.Right + Dpi.S(15), Dpi.S(21));
+            });
             UpdateWingetBadge();
 
             _upgradeBtn = new Button
@@ -615,27 +673,30 @@ namespace CornDownloader
                 BackColor = Theme.METEOR,
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font(Theme.MonoFont, 7.5f, FontStyle.Bold),
-                Location  = new Point(Dpi.S(700), Dpi.S(14)),
-                Height    = Dpi.S(30),
                 Visible   = false,
                 Cursor    = Cursors.Hand
             };
+            _dpi.Add(() =>
+            {
+                _upgradeBtn.Font     = Theme.Font(Theme.MonoFont, 7.5f, FontStyle.Bold);
+                _upgradeBtn.Location = new Point(Dpi.S(700), Dpi.S(14));
+                _upgradeBtn.Height   = Dpi.S(30);
+            });
             _upgradeBtn.FlatAppearance.BorderSize = 0;
             _upgradeBtn.Click += OnUpgradeClicked;
 
             _updateLink = new LinkLabel
             {
                 AutoSize         = true,
-                Font             = new Font(Theme.MonoFont, 7.5f, FontStyle.Bold),
                 LinkColor        = Theme.ACCENT,
                 ActiveLinkColor  = Theme.ACCENT_DIM,
                 VisitedLinkColor = Theme.ACCENT,
                 LinkBehavior     = LinkBehavior.HoverUnderline,
                 BackColor        = Color.Transparent,
-                Visible          = false,
-                Anchor           = AnchorStyles.Top | AnchorStyles.Right
+                Visible          = false
             };
+            // Positioned by LayoutPanels; an Anchor here fought it on every resize.
+            _dpi.Add(() => _updateLink.Font = Theme.Font(Theme.MonoFont, 7.5f, FontStyle.Bold));
             _updateLink.LinkClicked += (s, e) =>
             {
                 if (_updateLink.Tag is string url)
@@ -657,59 +718,54 @@ namespace CornDownloader
         // ── Sidebar ───────────────────────────────────────────────────────────
         private void BuildSidebar()
         {
-            _sidebar = new Panel { BackColor = Theme.SURFACE };
+            // AutoScroll: with 9 categories the buttons + scan status no longer fit the
+            // sidebar at the minimum window height (or at 150%+ scaling) and were clipped.
+            _sidebar = new Panel { BackColor = Theme.SURFACE, AutoScroll = true };
+            // Vertical scrolling only: the vertical bar eats ~17px, which would otherwise
+            // push the 194px-wide buttons past the edge and add a pointless horizontal bar.
+            _sidebar.HorizontalScroll.Enabled = false;
+            _sidebar.HorizontalScroll.Visible = false;
+            _sidebar.HorizontalScroll.Maximum = 0;
 
             var sideHeader = new Label
             {
                 Text      = "// CATEGORIES",
-                Font      = new Font(Theme.MonoFont, 6.5f, FontStyle.Bold),
                 ForeColor = Theme.MUTED,
                 AutoSize  = true,
-                Location  = new Point(Dpi.S(12), Dpi.S(12)),
                 BackColor = Color.Transparent
             };
+            _dpi.Add(() =>
+            {
+                sideHeader.Font     = Theme.Font(Theme.MonoFont, 6.5f, FontStyle.Bold);
+                sideHeader.Location = new Point(Dpi.S(12), Dpi.S(12));
+            });
             _sidebar.Controls.Add(sideHeader);
 
-            int y = Dpi.S(34);
+            var catBtns = new List<Button>();
             foreach (var cat in _categories)
             {
                 var btn = CreateSidebarBtn(cat);
-                btn.Location = new Point(Dpi.S(8), y);
-                btn.Width    = Dpi.S(194);
+                catBtns.Add(btn);
                 _sidebar.Controls.Add(btn);
-                y += Dpi.S(38);
             }
 
-            var divider = new Panel
-            {
-                BackColor = Theme.BORDER,
-                Size      = new Size(Dpi.S(178), 1),
-                Location  = new Point(Dpi.S(12), y + Dpi.S(6))
-            };
+            var divider  = new Panel { BackColor = Theme.BORDER };
             _sidebar.Controls.Add(divider);
-            y += Dpi.S(14);
 
             var selAll = CreateSmallBtn("✦ ALL", Theme.ACCENT);
-            selAll.Location  = new Point(Dpi.S(8), y + Dpi.S(6));
-            selAll.Width     = Dpi.S(92);
             selAll.ForeColor = Theme.ACCENT_TEXT;
             selAll.Click    += (s, e) => SetAllInView(true);
 
             var deselAll = CreateSmallBtn("✗ NONE", Theme.SURFACE2);
-            deselAll.Location  = new Point(Dpi.S(106), y + Dpi.S(6));
-            deselAll.Width     = Dpi.S(96);
             deselAll.ForeColor = Theme.TEXT_SEC;
             deselAll.Click    += (s, e) => SetAllInView(false);
 
             var recBtn = new Button
             {
                 Text      = "★  RECOMMENDED",
-                Size      = new Size(Dpi.S(194), Dpi.S(32)),
-                Location  = new Point(Dpi.S(8), y + Dpi.S(42)),
                 BackColor = Theme.ACCENT,
                 ForeColor = Theme.ACCENT_TEXT,
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font(Theme.MonoFont, 7f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
             recBtn.FlatAppearance.BorderSize = 0;
@@ -719,43 +775,64 @@ namespace CornDownloader
                 UpdateSelectionCount();
             };
 
-            var exportBtn = CreateGhostBtn("⬆ EXPORT", Theme.ACCENT, Dpi.S(92));
-            exportBtn.Location = new Point(Dpi.S(8), y + Dpi.S(82));
+            var exportBtn = CreateGhostBtn("⬆ EXPORT", Theme.ACCENT, 92);
             exportBtn.Click += (s, e) => ExportSelections();
 
-            var importBtn = CreateGhostBtn("⬇ IMPORT", Theme.TEXT_SEC, Dpi.S(96));
-            importBtn.Location = new Point(Dpi.S(106), y + Dpi.S(82));
+            var importBtn = CreateGhostBtn("⬇ IMPORT", Theme.TEXT_SEC, 96);
             importBtn.Click += (s, e) => ImportSelections();
 
             _scanStatusLabel = new Label
             {
                 Text      = _dm.WingetAvailable ? "🔍 scanning..." : "",
                 ForeColor = Theme.MUTED,
-                Font      = new Font(Theme.MonoFont, 6.5f),
                 AutoSize  = false,
-                Size      = new Size(Dpi.S(194), Dpi.S(36)),
-                Location  = new Point(Dpi.S(8), y + Dpi.S(116)),
                 BackColor = Color.Transparent,
                 TextAlign = ContentAlignment.MiddleLeft
             };
 
+            // One step lays out the whole column so every row moves together at a new scale.
+            _dpi.Add(() =>
+            {
+                int y = Dpi.S(34);
+                foreach (var btn in catBtns)
+                {
+                    btn.SetBounds(Dpi.S(8), y, Dpi.S(194), Dpi.S(32));
+                    y += Dpi.S(38);
+                }
+                divider.SetBounds(Dpi.S(12), y + Dpi.S(6), Dpi.S(178), Math.Max(1, Dpi.S(1)));
+                y += Dpi.S(14);
+
+                selAll.SetBounds(Dpi.S(8), y + Dpi.S(6), Dpi.S(92), Dpi.S(28));
+                deselAll.SetBounds(Dpi.S(106), y + Dpi.S(6), Dpi.S(96), Dpi.S(28));
+                recBtn.SetBounds(Dpi.S(8), y + Dpi.S(42), Dpi.S(194), Dpi.S(32));
+                recBtn.Font = Theme.Font(Theme.MonoFont, 7f, FontStyle.Bold);
+                exportBtn.Location = new Point(Dpi.S(8), y + Dpi.S(82));
+                importBtn.Location = new Point(Dpi.S(106), y + Dpi.S(82));
+                _scanStatusLabel.Font = Theme.Font(Theme.MonoFont, 6.5f);
+                _scanStatusLabel.SetBounds(Dpi.S(8), y + Dpi.S(116), Dpi.S(194), Dpi.S(36));
+            });
+
             _sidebar.Controls.AddRange(new Control[] { selAll, deselAll, recBtn, exportBtn, importBtn, _scanStatusLabel });
         }
 
-        private Button CreateGhostBtn(string text, Color fg, int width)
+        // width/height are logical (96-DPI) pixels; scaled now and on every DPI change.
+        private Button CreateGhostBtn(string text, Color fg, int width, int height = 26)
         {
             var btn = new Button
             {
                 Text      = text,
-                Size      = new Size(width, Dpi.S(26)),
                 BackColor = Theme.SURFACE2,
                 ForeColor = fg,
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font(Theme.MonoFont, 6.5f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
             btn.FlatAppearance.BorderColor = Theme.BORDER2;
             btn.FlatAppearance.BorderSize  = 1;
+            _dpi.Add(() =>
+            {
+                btn.Size = new Size(Dpi.S(width), Dpi.S(height));
+                btn.Font = Theme.Font(Theme.MonoFont, 6.5f, FontStyle.Bold);
+            });
             return btn;
         }
 
@@ -766,6 +843,7 @@ namespace CornDownloader
             {
                 "Media & Entertainment"    => "MEDIA & ENTERTAIN.",
                 "Utilities & System Tools" => "UTILITIES & SYS.",
+                "Security & Privacy"       => "SECURITY & PRIV.",
                 _                          => category.ToUpper()
             };
 
@@ -779,11 +857,9 @@ namespace CornDownloader
                 FlatStyle     = FlatStyle.Flat,
                 BackColor     = active ? Color.FromArgb(40, Theme.ACCENT) : Color.Transparent,
                 ForeColor     = active ? Theme.ACCENT : Theme.TEXT_SEC,
-                Font          = new Font(Theme.MonoFont, 7f, active ? FontStyle.Bold : FontStyle.Regular),
-                Height        = Dpi.S(32),
-                Padding       = new Padding(0, 0, Dpi.S(36), 0),
                 AutoEllipsis  = true,
                 AutoSize      = false,
+                UseMnemonic   = false,   // "MEDIA & ENTERTAIN." rendered as "MEDIA  ENTERTAIN." with an underlined E
                 Cursor        = Cursors.Hand
             };
             btn.FlatAppearance.BorderSize         = 0;
@@ -794,20 +870,27 @@ namespace CornDownloader
             {
                 Text      = total.ToString(),
                 AutoSize  = false,
-                Size      = new Size(Dpi.S(28), Dpi.S(14)),
-                Font      = new Font(Theme.MonoFont, 6f, FontStyle.Bold),
                 ForeColor = Theme.MUTED,
                 BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleCenter
+                TextAlign = ContentAlignment.MiddleCenter,
+                UseMnemonic = false
             };
             btn.Controls.Add(badge);
-            void PositionBadge() => badge.Location = new Point(btn.Width - Dpi.S(32), (btn.Height - Dpi.S(14)) / 2);
+            // Wide enough for "12/34" once a category has a selection.
+            void PositionBadge() => badge.Location = new Point(btn.Width - badge.Width - Dpi.S(4), (btn.Height - badge.Height) / 2);
+            _dpi.Add(() =>
+            {
+                btn.Font     = Theme.Font(Theme.MonoFont, 7f, _activeCategory == category ? FontStyle.Bold : FontStyle.Regular);
+                btn.Padding  = new Padding(0, 0, Dpi.S(44), 0);
+                badge.Font   = Theme.Font(Theme.MonoFont, 6f, FontStyle.Bold);
+                badge.Size   = new Size(Dpi.S(40), Dpi.S(14));
+                PositionBadge();
+            });
             btn.SizeChanged   += (s, e) => PositionBadge();
             btn.HandleCreated += (s, e) => PositionBadge();
 
             btn.Paint += (s, e) =>
             {
-                PositionBadge();
                 if (_activeCategory == category)
                 {
                     using var b = new SolidBrush(Theme.ACCENT);
@@ -848,14 +931,13 @@ namespace CornDownloader
             var btn = new Button
             {
                 Text      = text,
-                Height    = Dpi.S(28),
                 BackColor = bg,
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font(Theme.MonoFont, 7f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
             btn.FlatAppearance.BorderSize = 0;
+            _dpi.Add(() => btn.Font = Theme.Font(Theme.MonoFont, 7f, FontStyle.Bold));
             return btn;
         }
 
@@ -867,7 +949,7 @@ namespace CornDownloader
                 var  btn    = kv.Value;
                 btn.BackColor = active ? Color.FromArgb(40, Theme.ACCENT) : Color.Transparent;
                 btn.ForeColor = active ? Theme.ACCENT : Theme.TEXT_SEC;
-                btn.Font      = new Font(Theme.MonoFont, 7f, active ? FontStyle.Bold : FontStyle.Regular);
+                btn.Font      = Theme.Font(Theme.MonoFont, 7f, active ? FontStyle.Bold : FontStyle.Regular);
                 btn.Invalidate();
             }
         }
@@ -881,10 +963,25 @@ namespace CornDownloader
                 AutoScroll   = true,
                 WrapContents = true,
                 BackColor    = Theme.BG,
-                Padding      = new Padding(Dpi.S(12)),
                 Dock         = DockStyle.Fill
             };
+            _dpi.Add(() => _appGrid.Padding = new Padding(Dpi.S(12)));
             _mainArea.Controls.Add(_appGrid);
+
+            // Shown instead of an empty grid when a search matches nothing.
+            _emptyLabel = new Label
+            {
+                ForeColor = Theme.MUTED,
+                BackColor = Color.Transparent,
+                AutoSize  = true,
+                Visible   = false,
+                UseMnemonic = false
+            };
+            _dpi.Add(() =>
+            {
+                _emptyLabel.Font   = Theme.Font(Theme.MonoFont, 9f);
+                _emptyLabel.Margin = new Padding(Dpi.S(8), Dpi.S(24), 0, 0);
+            });
         }
 
         private void PopulateApps(string category)
@@ -893,6 +990,7 @@ namespace CornDownloader
             // Headers are rebuilt on every keystroke; Clear() alone would leak their handles/fonts. Tiles are cached and reused.
             foreach (var h in _appGrid.Controls.OfType<SectionHeader>().ToList()) h.Dispose();
             _appGrid.Controls.Clear();
+            _appGrid.AutoScrollPosition = Point.Empty;   // a new filter starts at the top, not mid-list
 
             IEnumerable<AppEntry> apps = category == "All"
                 ? AppCatalog.All
@@ -902,9 +1000,18 @@ namespace CornDownloader
             if (search.Length > 0)
                 apps = apps.Where(a => (a.Name ?? "").Contains(search, StringComparison.OrdinalIgnoreCase) ||
                                        (a.Description ?? "").Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                                       (a.WingetId ?? "").Contains(search, StringComparison.OrdinalIgnoreCase));
+                                       (a.WingetId ?? "").Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                                       (a.Category ?? "").Contains(search, StringComparison.OrdinalIgnoreCase));
 
-            foreach (var group in apps.ToList().GroupBy(a => a.Category).OrderBy(g => g.Key))
+            var visible = apps.ToList();
+            if (visible.Count == 0)
+            {
+                _emptyLabel.Text    = search.Length > 0 ? $"// no apps match \"{search}\"" : "// nothing in this category";
+                _emptyLabel.Visible = true;
+                _appGrid.Controls.Add(_emptyLabel);
+            }
+
+            foreach (var group in visible.GroupBy(a => a.Category).OrderBy(g => g.Key))
             {
                 var header = new SectionHeader(group.Key, CategoryEmoji(group.Key));
                 _appGrid.Controls.Add(header);
@@ -934,6 +1041,7 @@ namespace CornDownloader
             "Gaming"                   => "🎮",
             "Utilities & System Tools" => "🔧",
             "Customization"            => "🎨",
+            "Security & Privacy"       => "🛡️",
             _                          => "📦"
         };
 
@@ -958,9 +1066,7 @@ namespace CornDownloader
             {
                 Text      = "// SAVE TO",
                 ForeColor = Theme.MUTED,
-                Font      = new Font(Theme.MonoFont, 7f, FontStyle.Bold),
-                AutoSize  = true,
-                Location  = new Point(Dpi.S(16), Dpi.S(14))
+                AutoSize  = true
             };
 
             _folderBox = new TextBox
@@ -968,65 +1074,82 @@ namespace CornDownloader
                 Text        = AppPaths.DefaultDownloadFolder,
                 BackColor   = Theme.CARD,
                 ForeColor   = Theme.TEXT_PRI,
-                BorderStyle = BorderStyle.FixedSingle,
-                Font        = new Font(Theme.MonoFont, 8.5f),
-                Size        = new Size(Dpi.S(320), Dpi.S(24)),
-                Location    = new Point(Dpi.S(110), Dpi.S(11))
+                BorderStyle = BorderStyle.FixedSingle
             };
 
-            var browseBtn = CreateGhostBtn("BROWSE", Theme.TEXT_SEC, Dpi.S(70));
-            browseBtn.Size     = new Size(Dpi.S(70), Dpi.S(24));
-            browseBtn.Location = new Point(Dpi.S(438), Dpi.S(11));
+            var browseBtn = CreateGhostBtn("BROWSE", Theme.TEXT_SEC, 70, 24);
             browseBtn.Click += (s, e) =>
             {
-                using var dlg = new FolderBrowserDialog { InitialDirectory = _folderBox.Text };
-                if (dlg.ShowDialog() == DialogResult.OK) _folderBox.Text = dlg.SelectedPath;
+                using var dlg = new FolderBrowserDialog { InitialDirectory = _folderBox.Text, UseDescriptionForTitle = true, Description = "Save direct-URL installers to" };
+                if (dlg.ShowDialog(this) == DialogResult.OK) { _folderBox.Text = dlg.SelectedPath; SaveSettings(); }
+            };
+
+            var openFolderBtn = CreateGhostBtn("OPEN", Theme.TEXT_SEC, 50, 24);
+            openFolderBtn.Click += (s, e) =>
+            {
+                string dir = _folderBox.Text.Trim();
+                try
+                {
+                    if (!Directory.Exists(dir)) { _statusLabel.Text = "✘ That folder doesn't exist yet."; return; }
+                    Process.Start(new ProcessStartInfo(dir) { UseShellExecute = true })?.Dispose();
+                }
+                catch (Exception ex) { SessionLog.Write("OPEN-FOLDER", ex); }
             };
 
             _preferWingetChk = new CheckBox
             {
                 Text      = "prefer winget",
                 ForeColor = Theme.MUTED,
-                Font      = new Font(Theme.MonoFont, 7.5f),
                 Checked   = _dm.WingetAvailable,
                 Enabled   = _dm.WingetAvailable,
-                AutoSize  = true,
-                Location  = new Point(Dpi.S(524), Dpi.S(14))
+                AutoSize  = true
             };
 
             _overallProgress = new ProgressBar
             {
-                Size     = new Size(Dpi.S(460), Dpi.S(6)),
-                Location = new Point(Dpi.S(16), Dpi.S(50)),
                 Style    = ProgressBarStyle.Continuous,
                 Minimum  = 0, Maximum = 100, Value = 0
             };
 
             _statusLabel = new Label
             {
-                Text      = "ready.",
-                ForeColor = Theme.MUTED,
-                Font      = new Font(Theme.MonoFont, 7.5f),
-                AutoSize  = true,
-                Location  = new Point(Dpi.S(16), Dpi.S(62))
+                Text         = "ready.",
+                ForeColor    = Theme.MUTED,
+                AutoSize     = false,          // fixed box + ellipsis: long winget lines used to run under the buttons
+                AutoEllipsis = true,
+                UseMnemonic  = false
             };
 
             _selectionCountLabel = new Label
             {
                 ForeColor = Theme.ACCENT,
-                Font      = new Font(Theme.MonoFont, 8f, FontStyle.Bold),
-                AutoSize  = true,
-                Location  = new Point(Dpi.S(490), Dpi.S(52))
+                AutoSize  = true
             };
+
+            _dpi.Add(() =>
+            {
+                folderLbl.Font     = Theme.Font(Theme.MonoFont, 7f, FontStyle.Bold);
+                folderLbl.Location = new Point(Dpi.S(16), Dpi.S(14));
+                _folderBox.Font    = Theme.Font(Theme.MonoFont, 8.5f);
+                _folderBox.SetBounds(Math.Max(Dpi.S(110), folderLbl.Right + Dpi.S(8)), Dpi.S(11), Dpi.S(320), Dpi.S(24));
+                browseBtn.Location     = new Point(_folderBox.Right + Dpi.S(8), Dpi.S(11));
+                openFolderBtn.Location = new Point(browseBtn.Right + Dpi.S(6), Dpi.S(11));
+                _preferWingetChk.Font     = Theme.Font(Theme.MonoFont, 7.5f);
+                _preferWingetChk.Location = new Point(openFolderBtn.Right + Dpi.S(16), Dpi.S(14));
+                _overallProgress.SetBounds(Dpi.S(16), Dpi.S(50), Dpi.S(460), Dpi.S(6));
+                _statusLabel.Font  = Theme.Font(Theme.MonoFont, 7.5f);
+                _statusLabel.Location = new Point(Dpi.S(16), Dpi.S(62));
+                _statusLabel.Height   = Dpi.S(40);
+                _selectionCountLabel.Font     = Theme.Font(Theme.MonoFont, 8f, FontStyle.Bold);
+                _selectionCountLabel.Location = new Point(_overallProgress.Right + Dpi.S(14), Dpi.S(46));
+            });
 
             _clearBtn = new Button
             {
                 Text      = "✗ CLEAR",
-                Size      = new Size(Dpi.S(100), Dpi.S(36)),
                 BackColor = Theme.SURFACE2,
                 ForeColor = Theme.TEXT_SEC,
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font(Theme.MonoFont, 7.5f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
             _clearBtn.FlatAppearance.BorderColor = Theme.BORDER2;
@@ -1040,11 +1163,9 @@ namespace CornDownloader
             _installBtn = new Button
             {
                 Text      = "⬇  INSTALL",
-                Size      = new Size(Dpi.S(160), Dpi.S(36)),
                 BackColor = Theme.ACCENT,
                 ForeColor = Theme.ACCENT_TEXT,
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font(Theme.MonoFont, 9f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
             _installBtn.FlatAppearance.BorderSize = 0;
@@ -1053,33 +1174,45 @@ namespace CornDownloader
             _cancelBtn = new Button
             {
                 Text      = "✗ CANCEL",
-                Size      = new Size(Dpi.S(110), Dpi.S(36)),
                 BackColor = Theme.DANGER,
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font(Theme.MonoFont, 7.5f, FontStyle.Bold),
                 Cursor    = Cursors.Hand,
                 Visible   = false
             };
             _cancelBtn.FlatAppearance.BorderSize = 0;
-            _cancelBtn.Click += (s, e) => _cts?.Cancel();
+            _cancelBtn.Click += (s, e) =>
+            {
+                _cts?.Cancel();
+                _cancelBtn.Enabled = false;   // one click is enough; re-enabled by SetInstallingUi
+                _statusLabel.Text  = "⏳ Cancelling — waiting for the running installer to stop...";
+            };
 
             _logToggle = new Button
             {
                 Text      = "// LOG",
-                Size      = new Size(Dpi.S(65), Dpi.S(24)),
                 BackColor = Color.Transparent,
                 ForeColor = Theme.MUTED,
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font(Theme.MonoFont, 7f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
+            _dpi.Add(() =>
+            {
+                _clearBtn.Size   = new Size(Dpi.S(100), Dpi.S(36));
+                _clearBtn.Font   = Theme.Font(Theme.MonoFont, 7.5f, FontStyle.Bold);
+                _installBtn.Size = new Size(Dpi.S(160), Dpi.S(36));
+                _installBtn.Font = Theme.Font(Theme.MonoFont, 9f, FontStyle.Bold);
+                _cancelBtn.Size  = new Size(Dpi.S(110), Dpi.S(36));
+                _cancelBtn.Font  = Theme.Font(Theme.MonoFont, 7.5f, FontStyle.Bold);
+                _logToggle.Size  = new Size(Dpi.S(65), Dpi.S(24));
+                _logToggle.Font  = Theme.Font(Theme.MonoFont, 7f, FontStyle.Bold);
+            });
             _logToggle.FlatAppearance.BorderColor = Theme.BORDER;
             _logToggle.FlatAppearance.BorderSize  = 1;
             _logToggle.Click += (s, e) => ToggleLog();
 
             _bottomBar.Controls.AddRange(new Control[] {
-                folderLbl, _folderBox, browseBtn, _preferWingetChk,
+                folderLbl, _folderBox, browseBtn, openFolderBtn, _preferWingetChk,
                 _overallProgress, _statusLabel, _selectionCountLabel,
                 _clearBtn, _cancelBtn, _installBtn, _logToggle
             });
@@ -1090,21 +1223,19 @@ namespace CornDownloader
                 ForeColor   = Theme.ACCENT,
                 BorderStyle = BorderStyle.None,
                 ReadOnly    = true,
-                Font        = new Font(Theme.MonoFont, 8.5f),
                 Dock        = DockStyle.Fill,
-                ScrollBars  = RichTextBoxScrollBars.Vertical
+                ScrollBars  = RichTextBoxScrollBars.Vertical,
+                DetectUrls  = false
             };
 
-            _logPanel = new Panel { BackColor = Theme.BG, Visible = false, Height = Dpi.S(160) };
+            _logPanel = new Panel { BackColor = Theme.BG, Visible = false };
 
             _logClose = new Button
             {
                 Text      = "✗ CLOSE",
-                Size      = new Size(Dpi.S(75), Dpi.S(22)),
                 BackColor = Color.Transparent,
                 ForeColor = Theme.MUTED,
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font(Theme.MonoFont, 6.5f, FontStyle.Bold),
                 Cursor    = Cursors.Hand
             };
             _logClose.FlatAppearance.BorderSize = 0;
@@ -1113,14 +1244,23 @@ namespace CornDownloader
             var logOpenFolder = new Button
             {
                 Text      = "📁 OPEN LOGS",
-                Size      = new Size(Dpi.S(100), Dpi.S(22)),
                 BackColor = Color.Transparent,
                 ForeColor = Theme.MUTED,
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font(Theme.MonoFont, 6.5f, FontStyle.Bold),
-                Cursor    = Cursors.Hand,
-                Location  = new Point(Dpi.S(8), Dpi.S(4))
+                Cursor    = Cursors.Hand
             };
+            _dpi.Add(() =>
+            {
+                _logBox.Font     = Theme.Font(Theme.MonoFont, 8.5f);
+                // Leave a strip at the top for the OPEN LOGS / CLOSE buttons instead of
+                // letting them sit on top of the first log lines.
+                _logPanel.Padding = new Padding(0, Dpi.S(28), 0, 0);
+                _logPanel.Height  = Dpi.S(160);
+                _logClose.Size    = new Size(Dpi.S(75), Dpi.S(22));
+                _logClose.Font    = Theme.Font(Theme.MonoFont, 6.5f, FontStyle.Bold);
+                logOpenFolder.SetBounds(Dpi.S(8), Dpi.S(4), Dpi.S(100), Dpi.S(22));
+                logOpenFolder.Font = Theme.Font(Theme.MonoFont, 6.5f, FontStyle.Bold);
+            });
             logOpenFolder.FlatAppearance.BorderSize = 0;
             logOpenFolder.Click += (s, e) =>
             {
@@ -1175,7 +1315,10 @@ namespace CornDownloader
 
             bool preferWinget = _preferWingetChk.Checked;
             _isInstalling = true;   // claim the slot before the first await so a second click can't start another batch
+            _installBtn.Enabled = false;
+            if (_upgradeBtn != null) _upgradeBtn.Enabled = false;
             await WaitForBackgroundScanAsync();
+            if (_closing || IsDisposed) return;
 
             try
             {
@@ -1221,8 +1364,11 @@ namespace CornDownloader
             _installBtn.Enabled = !installing;
             _installBtn.Text    = installBtnText;
             _cancelBtn.Visible  = installing;
+            _cancelBtn.Enabled  = true;
+            if (_upgradeBtn != null) _upgradeBtn.Enabled = !installing && _upgradeCache.Values.Any(v => v);
             if (installing) { _overallProgress.Value = 0; _overallProgress.Maximum = Math.Max(1, max); }
             else            { _cts?.Dispose(); _cts = null; }
+            TaskbarBadge.SetProgress(IsHandleCreated ? Handle : IntPtr.Zero, installing ? 0 : -1, Math.Max(1, max));
         }
 
         private void ReportBatch(List<InstallResult> results, int attempted)
@@ -1250,6 +1396,12 @@ namespace CornDownloader
                     // Reflect the install straight away instead of waiting for the next launch's scan.
                     _installedCache[app] = true;
                     tile.SetInstalled(true);
+                    if (_upgradeCache.TryGetValue(app, out bool had) && had)
+                    {
+                        _upgradeCache[app] = false;   // a fresh install is the latest version
+                        tile.SetHasUpdate(false);
+                        RefreshUpgradeButton();
+                    }
                 }
                 int pct = ParsePercent(msg);
                 if (pct >= 0 && (status == InstallStatus.Installing || status == InstallStatus.Downloading))
@@ -1259,8 +1411,11 @@ namespace CornDownloader
             Log($"[{app.Name}] {msg}");
         });
 
-        private void OnOverallProgress(int done, int total) =>
-            Ui(() => _overallProgress.Value = Math.Min(done, _overallProgress.Maximum));
+        private void OnOverallProgress(int done, int total) => Ui(() =>
+        {
+            _overallProgress.Value = Math.Min(done, _overallProgress.Maximum);
+            TaskbarBadge.SetProgress(IsHandleCreated ? Handle : IntPtr.Zero, done, Math.Max(1, total));
+        });
 
         private void UpdateSelectionCount()
         {

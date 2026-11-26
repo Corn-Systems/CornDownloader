@@ -11,6 +11,10 @@ namespace CornDownloader
         public bool   PreferWinget   { get; set; } = true;
         public int    WindowWidth    { get; set; } = 1180;
         public int    WindowHeight   { get; set; } = 760;
+        // true once WindowWidth/Height are stored in logical (96-DPI) pixels (v1.4+).
+        // Missing from pre-1.4 files, so it deserialises as false and those sizes are
+        // read as raw pixels once; fresh settings (see Load) start out logical.
+        public bool   SizeIsLogical  { get; set; }
         public string WindowState    { get; set; } = "Maximized";
         // "auto" = let winget decide, "user" or "machine" = pass --scope explicitly.
         public string WingetScope    { get; set; } = "auto";
@@ -26,14 +30,16 @@ namespace CornDownloader
             try
             {
                 if (File.Exists(AppPaths.SettingsFile))
-                    return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(AppPaths.SettingsFile)) ?? new AppSettings();
+                    return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(AppPaths.SettingsFile)) ?? Fresh();
             }
             catch (Exception ex)
             {
                 SessionLog.Write("SETTINGS", ex);
             }
-            return new AppSettings();
+            return Fresh();
         }
+
+        private static AppSettings Fresh() => new AppSettings { SizeIsLogical = true };
 
         public static void Save(AppSettings settings)
         {

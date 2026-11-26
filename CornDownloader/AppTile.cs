@@ -30,6 +30,7 @@ namespace CornDownloader
         private          RichTextBox _tileLog;
         private          Panel       _logDrawer;
         private          Button      _logToggleBtn;
+        private readonly DpiLayout   _dpi = new();
 
         private const int BASE_HEIGHT     = 125;   // collapsed tile height (logical px)
         private const int LOG_HEIGHT      = 90;    // log drawer height (logical px)
@@ -66,10 +67,16 @@ namespace CornDownloader
             _checkedBg = checkedBg;
             _sharedTip = sharedTip;
 
-            Size      = new Size(Dpi.S(230), Dpi.S(BASE_HEIGHT));
+            // Width first: the anchored version toggle / picker compute their anchor
+            // distances from the tile size at the moment their bounds are set.
+            _dpi.Add(() =>
+            {
+                Size   = new Size(Dpi.S(230), Dpi.S(BASE_HEIGHT));
+                Margin = new Padding(Dpi.S(6));
+            });
             BackColor = normalBg;
-            Margin    = new Padding(Dpi.S(6));
             Cursor    = _app.HasInstallMethod ? Cursors.Hand : Cursors.No;
+            DoubleBuffered = true;   // hover / check repaint used to flicker the border
 
             // ── Border + checkmark paint ──────────────────────────────────────
             this.Paint += (s, e) =>
@@ -105,23 +112,18 @@ namespace CornDownloader
             var iconLbl = new Label
             {
                 Text      = app.IconChar,
-                Font      = new Font(Theme.EmojiFont, 15f),
                 AutoSize  = false,
-                Size      = new Size(Dpi.S(34), Dpi.S(34)),
-                Location  = new Point(Dpi.S(8), Dpi.S(8)),
                 BackColor = Color.Transparent,
-                TextAlign = ContentAlignment.MiddleCenter
+                TextAlign = ContentAlignment.MiddleCenter,
+                UseMnemonic = false
             };
 
             // ── Name ─────────────────────────────────────────────────────────
             var nameLbl = new Label
             {
                 Text         = app.Name,
-                Font         = new Font(Theme.MonoFont, 9f, FontStyle.Bold),
                 ForeColor    = textPri,
                 AutoSize     = false,
-                Size         = new Size(Dpi.S(152), Dpi.S(34)),
-                Location     = new Point(Dpi.S(48), Dpi.S(6)),
                 BackColor    = Color.Transparent,
                 AutoEllipsis = true,
                 UseMnemonic  = false
@@ -130,14 +132,22 @@ namespace CornDownloader
             // ── Description ──────────────────────────────────────────────────
             var descLbl = new Label
             {
-                Text      = app.Description,
-                Font      = new Font("Segoe UI", 7f),
-                ForeColor = textSec,
-                AutoSize  = false,
-                Size      = new Size(Dpi.S(210), Dpi.S(26)),
-                Location  = new Point(Dpi.S(10), Dpi.S(72)),
-                BackColor = Color.Transparent
+                Text         = app.Description,
+                ForeColor    = textSec,
+                AutoSize     = false,
+                BackColor    = Color.Transparent,
+                AutoEllipsis = true,
+                UseMnemonic  = false
             };
+            _dpi.Add(() =>
+            {
+                iconLbl.Font = Theme.Font(Theme.EmojiFont, 15f);
+                iconLbl.SetBounds(Dpi.S(8), Dpi.S(8), Dpi.S(34), Dpi.S(34));
+                nameLbl.Font = Theme.Font(Theme.MonoFont, 9f, FontStyle.Bold);
+                nameLbl.SetBounds(Dpi.S(48), Dpi.S(6), Dpi.S(152), Dpi.S(34));
+                descLbl.Font = Theme.Font(Theme.UiFont, 7f);
+                descLbl.SetBounds(Dpi.S(10), Dpi.S(72), Dpi.S(210), Dpi.S(28));
+            });
 
             // ── Method badge ─────────────────────────────────────────────────
             string method;
@@ -168,12 +178,9 @@ namespace CornDownloader
             var methodBadge = new Label
             {
                 Text      = method,
-                Font      = new Font(Theme.MonoFont, 6f),
                 ForeColor = badgeFg,
                 BackColor = Color.Transparent,
-                AutoSize  = true,
-                Location  = new Point(Dpi.S(10), Dpi.S(50)),
-                Padding   = new Padding(Dpi.S(2), Dpi.S(1), Dpi.S(2), Dpi.S(1))
+                AutoSize  = true
             };
             methodBadge.Paint += (s, e) =>
             {
@@ -184,11 +191,10 @@ namespace CornDownloader
             var catBadge = new Label
             {
                 Text      = app.Category.ToUpper(),
-                Font      = new Font(Theme.MonoFont, 5.5f),
                 ForeColor = Theme.MUTED,
                 BackColor = Color.Transparent,
                 AutoSize  = true,
-                Location  = new Point(methodBadge.PreferredWidth + Dpi.S(16), Dpi.S(52))
+                UseMnemonic = false
             };
 
             // ── Status dot ───────────────────────────────────────────────────
@@ -196,16 +202,12 @@ namespace CornDownloader
             {
                 Text      = "",
                 AutoSize  = true,
-                Location  = new Point(Dpi.S(10), Dpi.S(104)),
-                Font      = new Font(Theme.MonoFont, 7f),
                 BackColor = Color.Transparent
             };
 
             // ── Progress bar ─────────────────────────────────────────────────
             _progressBar = new ProgressBar
             {
-                Size     = new Size(this.Width - Dpi.S(20), Dpi.S(4)),
-                Location = new Point(Dpi.S(10), Dpi.S(118)),
                 Style    = ProgressBarStyle.Continuous,
                 Minimum  = 0, Maximum = 100, Value = 0,
                 Visible  = false
@@ -216,12 +218,23 @@ namespace CornDownloader
             {
                 Text      = "⬆ update available",
                 AutoSize  = true,
-                Location  = new Point(Dpi.S(10), Dpi.S(104)),
-                Font      = new Font(Theme.MonoFont, 6.5f),
                 ForeColor = Theme.METEOR,
                 BackColor = Color.Transparent,
                 Visible   = false
             };
+            _dpi.Add(() =>
+            {
+                methodBadge.Font     = Theme.Font(Theme.MonoFont, 6f);
+                methodBadge.Padding  = new Padding(Dpi.S(2), Dpi.S(1), Dpi.S(2), Dpi.S(1));
+                methodBadge.Location = new Point(Dpi.S(10), Dpi.S(50));
+                catBadge.Font        = Theme.Font(Theme.MonoFont, 5.5f);
+                catBadge.Location    = new Point(Dpi.S(10) + methodBadge.PreferredWidth + Dpi.S(6), Dpi.S(52));
+                _statusDot.Font      = Theme.Font(Theme.MonoFont, 7f);
+                _statusDot.Location  = new Point(Dpi.S(10), Dpi.S(104));
+                _progressBar.SetBounds(Dpi.S(10), Dpi.S(118), Width - Dpi.S(20), Dpi.S(4));
+                _updateBadge.Font     = Theme.Font(Theme.MonoFont, 6.5f);
+                _updateBadge.Location = new Point(Dpi.S(10), Dpi.S(104));
+            });
 
             // ── Version picker (winget only) ──────────────────────────────────
             if (app.WingetId != null)
@@ -229,14 +242,10 @@ namespace CornDownloader
                 _versionToggle = new Button
                 {
                     Text      = "ver ▾",
-                    Size      = new Size(Dpi.S(44), Dpi.S(16)),
-                    Location  = new Point(Width - Dpi.S(50), Dpi.S(50)),
                     BackColor = Color.Transparent,
                     ForeColor = Theme.MUTED,
                     FlatStyle = FlatStyle.Flat,
-                    Font      = new Font(Theme.MonoFont, 5.5f),
-                    Cursor    = Cursors.Hand,
-                    Anchor    = AnchorStyles.Top | AnchorStyles.Right
+                    Cursor    = Cursors.Hand
                 };
                 _versionToggle.FlatAppearance.BorderColor = Theme.BORDER2;
                 _versionToggle.FlatAppearance.BorderSize  = 1;
@@ -247,12 +256,18 @@ namespace CornDownloader
                     DropDownStyle  = ComboBoxStyle.DropDownList,
                     BackColor      = Theme.BG,
                     ForeColor      = Theme.ACCENT,
-                    Font           = new Font(Theme.MonoFont, 6.5f),
-                    Size           = new Size(Dpi.S(210), Dpi.S(20)),
-                    Location       = new Point(Dpi.S(10), Dpi.S(BASE_HEIGHT - 4)),
-                    Visible        = false,
-                    Anchor         = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+                    FlatStyle      = FlatStyle.Flat,
+                    Visible        = false
                 };
+                // Positioned explicitly (tile width is fixed) rather than anchored, so a
+                // DPI re-layout can't leave stale anchor distances behind.
+                _dpi.Add(() =>
+                {
+                    _versionToggle.Font = Theme.Font(Theme.MonoFont, 5.5f);
+                    _versionToggle.SetBounds(Width - Dpi.S(50), Dpi.S(50), Dpi.S(44), Dpi.S(16));
+                    _versionPicker.Font = Theme.Font(Theme.MonoFont, 6.5f);
+                    _versionPicker.SetBounds(Dpi.S(10), Dpi.S(BASE_HEIGHT - 2), Width - Dpi.S(20), Dpi.S(20));
+                });
                 _versionPicker.Items.Add("latest (default)");
                 if (!string.IsNullOrEmpty(app.PinnedVersion))
                     _versionPicker.Items.Add(app.PinnedVersion);
@@ -271,36 +286,40 @@ namespace CornDownloader
             _logToggleBtn = new Button
             {
                 Text      = "log ▸",
-                Size      = new Size(Dpi.S(38), Dpi.S(16)),
-                Location  = new Point(Dpi.S(10), Dpi.S(104)),
                 BackColor = Color.Transparent,
                 ForeColor = Theme.MUTED,
                 FlatStyle = FlatStyle.Flat,
-                Font      = new Font(Theme.MonoFont, 5.5f),
                 Cursor    = Cursors.Hand,
                 Visible   = false    // shown once there's log output
             };
             _logToggleBtn.FlatAppearance.BorderSize = 0;
             _logToggleBtn.Click += OnLogToggleClicked;
 
+            // Note: no Visible=false here — a docked child that starts hidden stays hidden
+            // after its drawer is shown, which is why the per-app log used to open empty.
             _tileLog = new RichTextBox
             {
                 BackColor   = Theme.BG,
                 ForeColor   = Color.FromArgb(100, Theme.ACCENT),   // dim gold
                 BorderStyle = BorderStyle.None,
                 ReadOnly    = true,
-                Font        = new Font(Theme.MonoFont, 6f),
                 ScrollBars  = RichTextBoxScrollBars.Vertical,
-                Visible     = false
+                DetectUrls  = false
             };
 
             _logDrawer = new Panel
             {
                 BackColor = Theme.DRAWER,
-                Visible   = false,
-                Location  = new Point(0, Dpi.S(BASE_HEIGHT)),
-                Size      = new Size(this.Width, Dpi.S(LOG_HEIGHT))
+                Visible   = false
             };
+            _dpi.Add(() =>
+            {
+                _logToggleBtn.Font = Theme.Font(Theme.MonoFont, 5.5f);
+                _logToggleBtn.SetBounds(Dpi.S(10), Dpi.S(104), Dpi.S(44), Dpi.S(16));
+                _tileLog.Font      = Theme.Font(Theme.MonoFont, 6f);
+                _logDrawer.Padding = new Padding(Dpi.S(4), Dpi.S(3), Dpi.S(2), Dpi.S(2));
+                _logDrawer.SetBounds(0, Dpi.S(BASE_HEIGHT), Width, Dpi.S(LOG_HEIGHT));
+            });
             // Top border on drawer
             _logDrawer.Paint += (s, e) =>
             {
@@ -324,14 +343,31 @@ namespace CornDownloader
                 if (_isInstalled && !_forceReinstall) return;
                 IsChecked = !_checked;
             }
-            this.Click     += Toggle;
-            iconLbl.Click  += Toggle;
-            nameLbl.Click  += Toggle;
-            descLbl.Click  += Toggle;
-            catBadge.Click += Toggle;
+            this.Click        += Toggle;
+            iconLbl.Click     += Toggle;
+            nameLbl.Click     += Toggle;
+            descLbl.Click     += Toggle;
+            catBadge.Click    += Toggle;
+            methodBadge.Click += Toggle;
+            _statusDot.Click  += Toggle;
+            _updateBadge.Click += Toggle;
 
-            this.MouseEnter += (s, e) => { if (!_checked) BackColor = Theme.CARD_HOVER; };
-            this.MouseLeave += (s, e) => { if (!_checked) BackColor = _normalBg; };
+            // Hover: moving onto a child label raises MouseLeave on the tile, which used to
+            // flash the hover colour off and on. Only drop it when the cursor really left.
+            void HoverOn(object s, EventArgs e) { if (!_checked) BackColor = Theme.CARD_HOVER; }
+            void HoverOff(object s, EventArgs e)
+            {
+                if (_checked || IsDisposed) return;
+                if (ClientRectangle.Contains(PointToClient(Cursor.Position))) return;
+                BackColor = _normalBg;
+            }
+            this.MouseEnter += HoverOn;
+            this.MouseLeave += HoverOff;
+            foreach (var child in new Control[] { iconLbl, nameLbl, descLbl, methodBadge, catBadge, _statusDot, _updateBadge })
+            {
+                child.MouseEnter += HoverOn;
+                child.MouseLeave += HoverOff;
+            }
 
             // ── Right-click context menu ──────────────────────────────────────
             var cms = new ContextMenuStrip();
@@ -354,7 +390,7 @@ namespace CornDownloader
                     }
                     else
                     {
-                        var forceItem = new ToolStripMenuItem("Force Reinstall");
+                        var forceItem = new ToolStripMenuItem("Force Reinstall / Repair");
                         forceItem.Click += (cs, ce) =>
                         {
                             _forceReinstall    = true;
@@ -375,10 +411,23 @@ namespace CornDownloader
                 if (!string.IsNullOrEmpty(_app.WingetId))
                 {
                     cms.Items.Add(new ToolStripSeparator());
-                    var idItem = new ToolStripMenuItem($"winget id: {_app.WingetId}") { Enabled = false };
-                    cms.Items.Add(idItem);
+                    var copyItem = new ToolStripMenuItem($"Copy winget id  ({_app.WingetId})");
+                    copyItem.Click += (cs, ce) =>
+                    {
+                        try { Clipboard.SetText(_app.WingetId); } catch (Exception ex) { SessionLog.Write("CLIPBOARD", ex); }
+                    };
+                    cms.Items.Add(copyItem);
+                    var cmdItem = new ToolStripMenuItem("Copy install command");
+                    cmdItem.Click += (cs, ce) =>
+                    {
+                        string pin = string.IsNullOrEmpty(_app.PinnedVersion) ? "" : $" --version \"{_app.PinnedVersion}\"";
+                        try { Clipboard.SetText($"winget install --id {_app.WingetId} --exact{pin}"); }
+                        catch (Exception ex) { SessionLog.Write("CLIPBOARD", ex); }
+                    };
+                    cms.Items.Add(cmdItem);
                 }
             };
+            FormClosedSafeDispose(cms);
             this.ContextMenuStrip = cms;
 
             // ── Tooltip (full description + install method) ───────────────────
@@ -426,7 +475,6 @@ namespace CornDownloader
             }
 
             _versionPicker.Visible = show;
-            _versionPicker.Location = new Point(Dpi.S(10), Dpi.S(BASE_HEIGHT) - Dpi.S(4));
             Relayout();
         }
 
@@ -444,6 +492,17 @@ namespace CornDownloader
             Height = Dpi.S(BASE_HEIGHT) + verH + (_logExpanded ? Dpi.S(LOG_HEIGHT) : 0);
             _logDrawer.Location = new Point(0, Dpi.S(BASE_HEIGHT) + verH);
         }
+
+        // Called by MainForm after the window moves to a monitor with a different DPI.
+        public void ApplyDpi()
+        {
+            SuspendLayout();
+            try   { _dpi.Reapply(); Relayout(); }
+            finally { ResumeLayout(true); }
+            Invalidate(true);
+        }
+
+        private void FormClosedSafeDispose(ContextMenuStrip cms) => Disposed += (s, e) => cms.Dispose();
 
         // ── Per-app log toggle ────────────────────────────────────────────────
         private void OnLogToggleClicked(object sender, EventArgs e)
@@ -499,6 +558,15 @@ namespace CornDownloader
                     _statusDot.Visible       = !_logToggleBtn.Visible;
                     _progressBar.Visible     = false;
                     break;
+                case InstallStatus.Skipped:
+                    // Cancelled / skipped: previously had no case, so the tile sat on
+                    // "⏳ Installing..." with its progress bar showing until restart.
+                    _logToggleBtn.ForeColor  = Theme.MUTED;
+                    _statusDot.Text          = "⊘ Skipped";
+                    _statusDot.ForeColor     = Theme.MUTED;
+                    _statusDot.Visible       = !_logToggleBtn.Visible;
+                    _progressBar.Visible     = false;
+                    break;
             }
         }
 
@@ -548,6 +616,7 @@ namespace CornDownloader
         public void SetPinnedVersion(string version)
         {
             if (_versionPicker == null) return;
+            if (string.IsNullOrEmpty(version)) { _versionPicker.SelectedIndex = 0; RefreshVersionToggle(); return; }
             int idx = _versionPicker.Items.IndexOf(version);
             if (idx < 0) { _versionPicker.Items.Add(version); idx = _versionPicker.Items.Count - 1; }
             _versionPicker.SelectedIndex = idx;
@@ -563,12 +632,14 @@ namespace CornDownloader
             Height    = Dpi.S(48);
             Margin    = new Padding(Dpi.S(6), Dpi.S(18), Dpi.S(6), Dpi.S(4));
             BackColor = Color.Transparent;
-            Anchor    = AnchorStyles.Left | AnchorStyles.Right;
 
             Control lastParent = null;
+            // Parent padding too — otherwise the header is wider than the grid's display area
+            // and the FlowLayoutPanel grows a horizontal scrollbar.
+            int FitWidth() => Math.Max(Dpi.S(100), lastParent.ClientSize.Width - lastParent.Padding.Horizontal - Margin.Horizontal);
             EventHandler syncHandler = (ps, pe) =>
             {
-                if (lastParent != null) Width = lastParent.ClientSize.Width - Margin.Horizontal;
+                if (lastParent != null && !IsDisposed) Width = FitWidth();
             };
             this.ParentChanged += (s, e) =>
             {
@@ -576,10 +647,12 @@ namespace CornDownloader
                 lastParent = Parent;
                 if (lastParent != null)
                 {
-                    Width = lastParent.ClientSize.Width - Margin.Horizontal;
+                    Width = FitWidth();
                     lastParent.ClientSizeChanged += syncHandler;
                 }
             };
+            // Headers are disposed on every re-filter; unhook so the grid doesn't keep them alive.
+            this.Disposed += (s, e) => { if (lastParent != null) lastParent.ClientSizeChanged -= syncHandler; };
 
             var bar = new Panel
             {
@@ -591,7 +664,8 @@ namespace CornDownloader
             var lbl = new Label
             {
                 Text      = $"{emoji}  {title.ToUpper()}",
-                Font      = new Font(Theme.MonoFont, 8.5f, FontStyle.Bold),
+                Font      = Theme.Font(Theme.MonoFont, 8.5f, FontStyle.Bold),
+                UseMnemonic = false,
                 ForeColor = Theme.ACCENT,
                 AutoSize  = true,
                 Location  = new Point(Dpi.S(12), Dpi.S(14)),

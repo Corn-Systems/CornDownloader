@@ -42,6 +42,7 @@ namespace CornDownloader
 
         private const int MaxParallelDownloads = 3;
         private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(60);   // no bytes for this long = dead connection
+        private static readonly TimeSpan BusyRetryDelay = TimeSpan.FromSeconds(30); // "another install in progress" back-off
 
         private static readonly HttpClient _http;
 
@@ -205,6 +206,16 @@ namespace CornDownloader
             args.Append(ScopeArg);
 
             var r = await WingetRunner.RunAsync(args.ToString(), Timeout.InfiniteTimeSpan, onProgress, ct);
+
+            // Something outside this app (Windows Update, another installer) holds the Windows
+            // Installer lock. That usually clears within a minute — wait once and retry.
+            if (!r.Cancelled && ExitCodes.IsBusy(r.ExitCode))
+            {
+                onProgress?.Invoke($"Another installer is running — retrying {app.Name} in {BusyRetryDelay.TotalSeconds:0}s...");
+                try { await Task.Delay(BusyRetryDelay, ct); }
+                catch (OperationCanceledException) { return Finish(result, new WingetResult { ExitCode = -1, Cancelled = true }, null); }
+                r = await WingetRunner.RunAsync(args.ToString(), Timeout.InfiniteTimeSpan, onProgress, ct);
+            }
             return Finish(result, r, "Installed successfully via winget.");
         }
 
@@ -441,8 +452,11 @@ namespace CornDownloader
             string ext  = Path.GetExtension(destPath).ToLowerInvariant();
             string args = !string.IsNullOrEmpty(app.SilentArgs) ? app.SilentArgs : defaultExeSilentArgs;
 
+            // MSI: SilentArgs (when set) replace the default UI flags — the doc comment on
+            // AppEntry.SilentArgs promised this but the value was silently ignored before.
+            string msiArgs = !string.IsNullOrEmpty(app.SilentArgs) ? app.SilentArgs : "/passive /norestart";
             var psi = ext == ".msi"
-                ? new ProcessStartInfo("msiexec", $"/i \"{destPath}\" /passive /norestart") { UseShellExecute = true, Verb = "runas" }
+                ? new ProcessStartInfo("msiexec", $"/i \"{destPath}\" {msiArgs}") { UseShellExecute = true, Verb = "runas" }
                 : new ProcessStartInfo(destPath, args) { UseShellExecute = true, Verb = "runas" };
 
             await _installerGate.WaitAsync(ct);

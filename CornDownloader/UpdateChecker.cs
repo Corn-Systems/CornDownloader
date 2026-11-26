@@ -59,8 +59,13 @@ namespace CornDownloader
         {
             if (!Version.TryParse(Normalize(remoteTag), out var remote)) return false;
             if (!Version.TryParse(Normalize(local), out var current)) return false;
-            return remote > current;
+            // Version treats a missing component as -1, so "1.4" < "1.4.0" and a "v1.4.0" tag
+            // against a "1.4" build reported a phantom update. Compare on three parts.
+            return Pad(remote) > Pad(current);
         }
+
+        private static Version Pad(Version v) =>
+            new Version(v.Major, Math.Max(0, v.Minor), Math.Max(0, v.Build));
 
         private static string Normalize(string v)
         {

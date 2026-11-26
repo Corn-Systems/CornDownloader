@@ -3,7 +3,7 @@
 > A fast, open-source Windows app installer built in C# / WinForms by **Corn Systems**.
 > Drop it on a fresh Windows install, pick your apps, and hit install — winget handles the rest.
 
-**Version:** `1.3.1`
+**Version:** `1.4.0`
 **Platform:** Windows 10 (1809+) / 11, 64-bit
 **Runtime:** none required — ships as a self-contained single exe
 **License:** MIT
@@ -44,7 +44,13 @@ Up to **3 downloads** run at once. winget calls and installer launches are seria
 In-flight processes are killed, queued apps are skipped, partial downloads are kept for resume. The summary still reports what succeeded.
 
 ### 🔁 Force Reinstall
-Right-click an installed tile → **Force Reinstall** re-queues it with `--force` (orange border).
+Right-click an installed tile → **Force Reinstall / Repair** re-queues it with `--force` (orange border). The same menu copies the winget id or a ready-to-paste `winget install` command.
+
+### 🖥 Per-Monitor DPI
+The whole UI — layout, fonts, tiles, the summary dialog, the taskbar badge — re-scales when the window moves between monitors with different scaling (100% laptop ↔ 150% external, etc.), and opens at the right size on a secondary monitor. Window size is remembered in DPI-independent units.
+
+### ⌨ Keyboard
+**Ctrl+F** search · **Esc** clear search · **Ctrl+A** select everything in view · **Ctrl+Enter** install.
 
 ### 📌 Version Pinning
 Each winget tile has a **ver ▾** picker fed by `winget show --versions`. Pins are saved in exported packs.
@@ -101,17 +107,18 @@ exit $p.ExitCode
 
 ## App Catalog
 
-**120 apps** across 7 categories:
+**177 apps** across 8 categories:
 
 | Category | Apps |
 |---|---|
-| 🌐 Browsers | Firefox, Chrome, Brave, Chromium, Opera GX, Tor Browser, Waterfox, LibreWolf, Min, Zen |
-| 💻 Dev Tools | VS Code, Visual Studio 2022, Git, Node.js, Python, Windows Terminal, GitHub Desktop, Postman, Docker, PowerShell 7, JetBrains Toolbox, Neovim, WSL, Insomnia, HeidiSQL, Wireshark, Blockbench, PyPy, Rust, Go, Android Studio, and more |
-| 🎬 Media & Entertainment | VLC, Spotify, OBS, Audacity, HandBrake, MPC-HC, iTunes, Plex, Stremio, foobar2000, ImageGlass, FreeTube, GIMP, Streamlink Twitch GUI, Blender, and more |
-| 📋 Productivity | Notion, Obsidian, Slack, Zoom, LibreOffice, Notepad++, ShareX, Bitwarden, Thunderbird, Stretchly, Greenshot, WhatsApp Desktop, Ferdium, Claude Desktop, and more |
-| 🎮 Gaming | Steam, Epic Games, GOG Galaxy, EA App, Ubisoft Connect, Discord, MSI Afterburner, Playnite, Minecraft, Prism Launcher, Heroic, Xbox App, Sunshine, Parsec, Medal, Itch.io, Battle.net, Rockstar Games Launcher, Vortex, Mod Organizer 2, CapFrameX, and more |
-| 🔧 Utilities & System Tools | 7-Zip, NanaZip, Everything Search, CPU-Z, HWiNFO, HWMonitor, CrystalDiskInfo, WinDirStat, Autoruns, Malwarebytes, PowerToys, GPU-Z, Revo Uninstaller, OpenVPN, ProtonVPN, WireGuard, Microsoft PC Manager, BleachBit, O&O ShutUp10++, Bulk Rename Utility, System Informer, Ventoy, Rufus, and more |
-| 🎨 Customization | Rainmeter, Lively Wallpaper, TranslucentTB, StartAllBack, EarTrumpet, Windhawk, YASB, ModernFlyouts, Komorebi, GlazeWM, ExplorerPatcher, FancyZones (PowerToys) |
+| 🌐 Browsers | Firefox, Chrome, Brave, Chromium, Opera GX, Tor Browser, Waterfox, LibreWolf, Min, Zen, Vivaldi, Floorp |
+| 💻 Dev Tools | VS Code, Visual Studio 2026, Visual Studio 2022, .NET 10 SDK, Git, GitHub CLI, Node.js, Bun, Python, Java 21 (Temurin), Windows Terminal, GitHub Desktop, Postman, Bruno, Insomnia, Docker, PowerShell 7, Oh My Posh, JetBrains Toolbox, Zed, Sublime Text, Neovim, WSL, HeidiSQL, DBeaver, WinMerge, PuTTY, WinSCP, CMake, Blockbench, PyPy, Rust, Go, Android Studio |
+| 🎬 Media & Entertainment | VLC, Spotify, OBS, Audacity, HandBrake, MPC-HC, iTunes, Plex, Kodi, Stremio, foobar2000, ImageGlass, FreeTube, yt-dlp, GIMP, Krita, Inkscape, Paint.NET, Kdenlive, Shotcut, Streamlink Twitch GUI, Blender, and more |
+| 📋 Productivity | Notion, Obsidian, Joplin, Logseq, Zotero, Anki, Slack, Zoom, Signal, Telegram, LibreOffice, ONLYOFFICE, SumatraPDF, Notepad++, ShareX, Thunderbird, Stretchly, Greenshot, WhatsApp Desktop, Ferdium, Flow Launcher, Espanso, Claude Desktop, and more |
+| 🎮 Gaming | Steam, Epic Games, GOG Galaxy, EA App, Ubisoft Connect, Discord, MSI Afterburner, RivaTuner, Playnite, RetroArch, Minecraft, Prism Launcher, Heroic, Xbox App, Sunshine, Moonlight, Parsec, Medal, Itch.io, Battle.net, Rockstar Games Launcher, Vortex, Mod Organizer 2, CapFrameX |
+| 🔧 Utilities & System Tools | 7-Zip, NanaZip, Everything Search, CPU-Z, HWiNFO, HWMonitor, CrystalDiskInfo, CrystalDiskMark, WinDirStat, WizTree, Autoruns, Process Explorer, PowerToys, GPU-Z, DDU, Revo Uninstaller, Bulk Crap Uninstaller, Microsoft PC Manager, BleachBit, Bulk Rename Utility, System Informer, Ventoy, Rufus, Ditto, AutoHotkey, LocalSend, RustDesk, qBittorrent, Tailscale, and more |
+| 🎨 Customization | Rainmeter, Lively Wallpaper, TranslucentTB, StartAllBack, EarTrumpet, Windhawk, YASB, ModernFlyouts, Komorebi, GlazeWM, ExplorerPatcher, FancyZones (PowerToys), Auto Dark Mode, Nilesoft Shell, Twinkle Tray |
+| 🛡️ Security & Privacy | Bitwarden, KeePassXC, VeraCrypt, Cryptomator, Malwarebytes, Wireshark, Burp Suite Community, HxD, simplewall, Portmaster, O&O ShutUp10++, ProtonVPN, WireGuard, OpenVPN |
 
 ---
 
@@ -160,8 +167,9 @@ CornDownloader/
 ├─ AppInfo.cs          name / version / repo constants + every on-disk path
 ├─ AppSettings.cs      settings model + load/save, .corn selection-pack format
 ├─ SessionLog.cs       persistent daily log
-├─ Theme.cs            Corn Systems palette
+├─ Theme.cs            Corn Systems palette + DPI-correct (pixel-sized, cached) fonts
 ├─ Dpi.cs              shared PerMonitorV2 helper (identical across Corn Systems repos)
+├─ DpiLayout.cs        re-runs layout steps when the window changes monitor DPI
 ├─ AppIcons.cs         window icon (embedded .ico, drawn fallback) + taskbar overlay badge
 ├─ Assets/CornDownloader.ico
 ├─ App.manifest

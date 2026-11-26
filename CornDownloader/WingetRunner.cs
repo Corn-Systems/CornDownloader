@@ -23,6 +23,14 @@ namespace CornDownloader
         public const int WingetInstallRebootToInstall  = unchecked((int)0x8A15010A);
         public const int WingetInstallRebootInitiated  = unchecked((int)0x8A15010B);
         public const int WingetInstallCancelledByUser  = unchecked((int)0x8A15010C);
+        public const int WingetNoPackageFound          = unchecked((int)0x8A150014);  // id not in any source
+        public const int WingetPackageInUse            = unchecked((int)0x8A150101);  // app is running
+        public const int WingetFileInUse               = unchecked((int)0x8A150103);
+        public const int WingetDiskFull                = unchecked((int)0x8A150105);
+        public const int WingetNoNetwork               = unchecked((int)0x8A150107);
+        public const int WingetDowngrade               = unchecked((int)0x8A15010E);
+        public const int WingetBlockedByPolicy         = unchecked((int)0x8A15010F);
+        public const int WingetPackageInUseByApp       = unchecked((int)0x8A150111);
 
         // Windows Installer / most EXE installers
         public const int MsiRebootInitiated = 1641;   // ERROR_SUCCESS_REBOOT_INITIATED
@@ -36,6 +44,10 @@ namespace CornDownloader
 
         public static bool IsInstallerSuccess(int code) =>
             code == Success || code == MsiRebootRequired || code == MsiRebootInitiated;
+
+        // Transient "someone else is installing" — worth one delayed retry.
+        public static bool IsBusy(int code) =>
+            code == WingetInstallInProgress || code == MsiAnotherInstallInProgress;
 
         public static bool NeedsReboot(int code) =>
             code == MsiRebootRequired || code == MsiRebootInitiated ||
@@ -52,6 +64,14 @@ namespace CornDownloader
             WingetInstallRebootToInstall   => "reboot required before this can install",
             WingetInstallRebootInitiated   => "success — reboot initiated",
             WingetInstallCancelledByUser   => "cancelled by user (UAC declined?)",
+            WingetNoPackageFound           => "package not found in winget sources (id renamed or removed?)",
+            WingetPackageInUse             => "the app is running — close it and retry",
+            WingetPackageInUseByApp        => "files are in use by another app — close it and retry",
+            WingetFileInUse                => "a file the installer needs is in use",
+            WingetDiskFull                 => "not enough disk space",
+            WingetNoNetwork                => "the installer needs a network connection",
+            WingetDowngrade                => "a newer version is already installed",
+            WingetBlockedByPolicy          => "blocked by group policy",
             MsiRebootRequired              => "success — reboot required",
             MsiRebootInitiated             => "success — reboot initiated",
             MsiAnotherInstallInProgress    => "another Windows Installer operation is in progress",
